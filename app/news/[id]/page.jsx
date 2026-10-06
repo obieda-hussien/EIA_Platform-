@@ -1,0 +1,6 @@
+import {notFound} from 'next/navigation';
+import {readEntry} from '../../../lib/discovery.mjs';
+import {pageMetadata,siteOrigin} from '../../../lib/seo.mjs';
+import {DiscoveryFrame,StructuredData,BreadcrumbData} from '../../../components/Discovery';
+export async function generateMetadata({params}){const {id}=await params,e=await readEntry('news',id);return e?pageMetadata(e.title+' | EIA Platform',e.body.slice(0,180),`/news/${id}`,'article'):{title:'الإعلان غير متاح',robots:{index:false}};}
+export default async function Page({params}){const {id}=await params,e=await readEntry('news',id);if(!e)notFound();return <DiscoveryFrame title={e.title} description="إعلان منشور على المنصة الطلابية المستقلة."><BreadcrumbData title={e.title} path={`/news/${id}`}/><StructuredData value={{'@context':'https://schema.org','@type':'Article',headline:e.title,url:siteOrigin()+`/news/${id}`,datePublished:e.createdAt,inLanguage:'ar',author:{'@type':'Organization',name:'فريق EIA Platform',url:siteOrigin()+'/about'}}}/><article className="discovery-article"><p className="preserve-lines">{e.body}</p>{e.sourceUrl&&<a href={e.sourceUrl} target="_blank" rel="noopener noreferrer">راجع المصدر الأصلي</a>}</article></DiscoveryFrame>;}

@@ -1,0 +1,5 @@
+import {readDiscovery} from '../../lib/discovery.mjs';
+import {pageMetadata,siteOrigin} from '../../lib/seo.mjs';
+import {DiscoveryFrame,EntryList,StructuredData} from '../../components/Discovery';
+export const metadata=pageMetadata('دليل المواد والمحاضرات | EIA Platform','تصفح المواد والمحاضرات والملخصات المنشورة وروابطها الأصلية في مكتبة طلابية مستقلة.','/library');
+export default async function Page(){const data=await readDiscovery();return <DiscoveryFrame title="دليل المكتبة الدراسية" description="مواد ومحاضرات وملخصات منشورة، مرتبة بروابط ثابتة. اختار المادة أو المحتوى اللي تحتاجه."><StructuredData value={{'@context':'https://schema.org','@type':'CollectionPage',name:'دليل المكتبة الدراسية',url:siteOrigin()+'/library',inLanguage:'ar',description:'مكتبة طلابية مستقلة للمحتوى المنشور.'}}/><section><h2>المواد الدراسية</h2><EntryList items={data.subjects.slice(0,100)} type="subjects"/></section><section><h2>آخر محتوى منشور</h2><EntryList items={data.resources} type="resources"/></section><section><h2>إعلانات الطلبة</h2><EntryList items={data.news} type="news"/></section></DiscoveryFrame>;}
