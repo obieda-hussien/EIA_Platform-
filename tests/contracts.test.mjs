@@ -157,3 +157,23 @@ test("Account validation rejects empty, malformed and oversized inputs", () => {
   assert.throws(() => password("short"));
   assert.throws(() => password("x".repeat(129)));
 });
+
+
+test("Surface authority is exact, fail-closed and ignores spoofed lookalikes", async () => {
+  const { isControlHost, surfaceAllows } = await import("../lib/surface.mjs");
+  assert.equal(isControlHost("CONTROL.TEST", "control.test"), true);
+  for (const host of ["student.test", "control.test.evil", "control.test:444", "control.test@evil", ""]) {
+    assert.equal(surfaceAllows(host, "/admin", "control.test"), false);
+    assert.equal(surfaceAllows(host, "/api/auth/session", "control.test"), false);
+  }
+  assert.equal(surfaceAllows("control.test", "/admin", ""), false);
+  assert.equal(surfaceAllows("control.test", "/api/public/catalog", "control.test"), false);
+  assert.equal(surfaceAllows("student.test", "/", "control.test"), true);
+});
+
+test("Same-origin control writes do not inherit the internal server port", () => {
+  const request = new Request("http://localhost:3000/api/admin/resources", {
+    method: "POST", headers: { host: "control.test", origin: "http://control.test" },
+  });
+  assert.doesNotThrow(() => checkOrigin(request));
+});

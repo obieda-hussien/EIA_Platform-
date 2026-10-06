@@ -1663,3 +1663,186 @@ input[type="checkbox"] {
 }
 .mfa-secret { display: block; overflow-wrap: anywhere; margin: 1rem 0; }
 .recovery-codes { display: grid; gap: .5rem; margin: 1rem 0; overflow-wrap: anywhere; }
+
+/* Distinct student and control surfaces. Shared primitives stay neutral. */
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #202127; }
+.student-app, .control-app, .control-login { --ink: #202127; --muted: #686b76; --line: #e8e9ef; --radius: 24px; --shadow: 0 8px 30px #22223305; }
+.student-app { min-height: 100dvh; background: #f8f9fc; }
+.student-app .container { max-width: 1180px; }
+.student-app .site-header, .control-login .site-header { background: #ffffffdf; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid #ececf2; }
+.student-app .header-inner { min-height: 88px; }
+.student-app .logo, .control-login .logo { background: #272833; color: #fff; border-radius: 16px; }
+.brand { letter-spacing: -.5px; }
+.brand-small { letter-spacing: 2.5px; font-weight: 500; }
+.student-app .desktop-nav { padding: 5px; border-radius: 15px; background: #f2f3f7; gap: 2px; }
+.student-app .desktop-nav button { min-height: 40px; border-radius: 11px; padding: 8px 17px; }
+.student-app .desktop-nav button.active { background: #fff; box-shadow: 0 2px 6px #22223309; }
+.student-app .profile-pill { background: #fff; border: 1px solid var(--line); border-radius: 14px; min-height: 44px; }
+.student-app .hero { padding: 68px 0 46px; gap: 76px; align-items: center; }
+.student-app .hero h1 { color: #202127; font-size: clamp(42px, 5vw, 68px); font-weight: 750; line-height: 1.28; letter-spacing: -2px; margin: 22px 0; }
+.student-app .hero h1 span { color: var(--accent); }
+.student-app .hero-copy > p { font-size: 16px; line-height: 1.95; max-width: 480px; margin-bottom: 28px; }
+.student-app .small-label { background: #fff; border: 1px solid var(--line); color: var(--muted); box-shadow: none; border-radius: 30px; }
+.hero-search { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 18px; padding-inline-start: 18px; background: #fff; border: 1px solid #e0e2ea; border-radius: 19px; box-shadow: 0 6px 24px #1a1b3205; max-width: 520px; }
+.hero-search > svg { flex-shrink: 0; color: #9296a1; }
+.hero-search input { border: 0; background: transparent; min-width: 0; width: 100%; padding: 11px 0; box-shadow: none; font-size: 14px; }
+.hero-search button { padding: 12px; width: 46px; height: 46px; flex-shrink: 0; border-radius: 13px; background: var(--ink); }
+.student-app .hero-copy > .text-button { margin-top: 16px; min-height: 44px; padding-inline: 0; }
+.student-app .hero-note { transform: none; background: #fff; border: 1px solid var(--line); box-shadow: 0 18px 60px #26264008; border-radius: 28px; padding: 30px; position: relative; }
+.student-app .hero-note h2 { font-size: 24px; letter-spacing: -.5px; }
+.student-app .note-head { color: var(--muted); margin-bottom: 26px; font-size: 13px; }
+.student-app .note-head > svg { width: 42px; height: 42px; padding: 10px; background: #f2f3fa; border-radius: 13px; color: var(--accent); }
+.student-app .note-lines { border-top: 1px solid var(--line); margin: 22px 0 10px; padding-top: 14px; }
+.student-app .note-lines > div { padding: 8px 0; font-size: 13px; }
+.student-app .note-lines strong { color: var(--ink); font-size: 18px; font-variant-numeric: tabular-nums; }
+.student-shortcuts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 52px; }
+.student-shortcut { background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 20px; padding: 20px; text-align: start; justify-content: flex-start; gap: 16px; }
+.student-shortcut:hover { background: #f1f2f8; }
+.student-shortcut > svg { margin-inline-start: auto; color: #979ba7; flex-shrink: 0; }
+.shortcut-icon { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: 14px; background: #f0f2fa; color: var(--accent); }
+.student-shortcut strong { display: block; font-size: 15px; }
+.student-shortcut small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; margin-top: 3px; }
+.student-app .section-heading { margin-bottom: 24px; }
+.student-app .section-heading h2 { font-size: 26px; letter-spacing: -.7px; }
+.student-app .eyebrow { color: #737783; letter-spacing: 0; font-weight: 500; }
+.student-app .resource-card, .student-app .subject-card, .student-app .source-card, .student-app .news-card { border-color: var(--line); border-radius: 24px; box-shadow: none; padding: 26px; background: #fff; }
+.student-app .resource-card h3 { font-weight: 650; font-size: 17px; line-height: 1.7; }
+.student-app .resource-card .file-icon { background: #f1f3fa; color: #7971bb; border: 0; border-radius: 14px; }
+.student-app .resource-card p { font-size: 13px; line-height: 1.9; }
+.student-app .tag { border-radius: 8px; font-weight: 500; }
+.student-app .resource-card button { border-radius: 13px; min-height: 44px; }
+.student-app .announcement-strip { margin: 40px 0 48px; border: 1px solid var(--line); background: #f0f2f8; border-radius: 24px; }
+.student-app .source-card { transition: border-color .2s; }
+.student-app .source-card:hover { border-color: #bec0cf; transform: none; }
+.student-app .source-card h3 { font-size: 17px; }
+.student-app .page-intro { padding-top: 48px; margin-bottom: 32px; }
+.student-app .page-intro h1 { font-size: clamp(32px, 4vw, 44px); letter-spacing: -1px; }
+.student-app .filter-bar { gap: 12px; }
+.student-app .filter-bar input, .student-app .filter-bar select, .student-app .search-box { border-radius: 14px; }
+.student-app .mobile-nav { background: #ffffffea; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid var(--line); padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+.student-app .mobile-nav button { min-height: 54px; border-radius: 14px; }
+.student-app .mobile-nav button.active { color: var(--accent); background: #f1f3fa; }
+.student-app .site-footer { padding-top: 40px; padding-bottom: 40px; margin-top: 64px; border-top: 1px solid var(--line); }
+.control-app, .control-login { --accent: #6d5baf; --mint: #f0edf8; background: #f7f8fb; min-height: 100dvh; }
+.control-app .admin-sidebar { background: #22232d; color: #fff; width: 260px; min-width: 260px; border: 0; padding: 32px 20px 20px; }
+.control-app .admin-sidebar .brand { color: #fff; margin-inline: 10px; }
+.control-app .admin-sidebar .logo { background: #ffffff14; color: #e8e4ff; }
+.control-app .admin-sidebar .brand-small { color: #a8a9bb; }
+.control-badge { display: flex; align-items: center; gap: 8px; color: #c2bfd5; font-size: 11px; margin: 25px 10px 0; }
+.control-app .sidebar-label { margin: 28px 12px 12px; color: #999aad; font-size: 11px; }
+.control-app .admin-sidebar nav { gap: 5px; }
+.control-app .admin-sidebar nav button { color: #bbbccb; border-radius: 13px; padding: 13px 14px; min-height: 48px; font-size: 13px; }
+.control-app .admin-sidebar nav button:hover { background: #ffffff0b; color: #fff; }
+.control-app .admin-sidebar nav button.active { color: #fff; background: #ffffff15; box-shadow: inset -3px 0 #bdb0f1; }
+.control-app .admin-sidebar nav button svg { color: #a7a4bd; }
+.control-app .admin-sidebar nav button.active svg { color: #d1c7f4; }
+.control-app .sidebar-user { display: flex; border-top: 1px solid #ffffff12; margin-top: auto; padding-top: 22px; padding-bottom: 22px; }
+.control-app .sidebar-user > div > span { color: #a8a9bb; }
+.control-app .avatar { background: #3c394f; color: #dfd7fa; border-radius: 13px; }
+.control-app .admin-sidebar > .button { background: #ffffff09; color: #d9d9e6; border-color: #ffffff15; border-radius: 12px; min-height: 44px; }
+.control-app .admin-sidebar > .text-button { color: #a8a9bb; min-height: 44px; }
+.control-app .admin-main { padding: 44px clamp(24px, 4vw, 64px); max-width: 1540px; }
+.control-app .admin-top { margin-bottom: 36px; gap: 28px; }
+.control-app .admin-top h1 { font-size: 32px; line-height: 1.4; letter-spacing: -.8px; }
+.control-context { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+.control-app .admin-top .eyebrow { color: #9396a1; font-size: 11px; }
+.control-app .admin-top-actions { align-self: flex-start; padding-top: 20px; }
+.control-app .stats-grid { gap: 18px; margin-bottom: 30px; }
+.control-app .stat-card { border-radius: 22px; border-color: var(--line); padding: 25px; background: #fff; box-shadow: none; }
+.control-app .stat-card > span { color: var(--muted); font-size: 12px; }
+.control-app .stat-card > span svg { color: #9993ae; }
+.control-app .stat-card strong { font-size: 32px; font-weight: 650; margin-top: 16px; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.control-app .panel { border-color: var(--line); border-radius: 24px; padding: 28px; box-shadow: none; margin-bottom: 26px; }
+.control-app .panel h2 { font-size: 20px; letter-spacing: -.4px; }
+.control-app .quick-actions { gap: 18px; }
+.control-app .quick-card { border: 1px solid var(--line); border-radius: 18px; background: #fafaff; color: var(--ink); padding: 24px; }
+.control-app .quick-card:hover { background: #f0edf8; }
+.control-app .quick-card > svg { background: #ebe7f7; color: var(--accent); padding: 12px; width: 48px; height: 48px; border-radius: 14px; }
+.control-app .quick-card h3 { margin: 16px 0 6px; font-size: 17px; }
+.control-app .quick-card p { font-size: 13px; }
+.control-app .list-row { padding-block: 20px; border-color: var(--line); }
+.control-app .table-toolbar { gap: 12px; margin-bottom: 26px; }
+.control-app input, .control-app textarea, .control-app select, .control-login input { border-radius: 13px; border-color: #e0e2e9; min-height: 46px; background: #fafbfe; }
+.control-app button, .control-app .button, .control-login button { min-height: 44px; border-radius: 13px; }
+.control-app button.danger { background: #fff3f3; color: #a52d42; }
+.control-login .login-layout { padding-top: 80px; padding-bottom: 80px; gap: 90px; }
+.control-login .login-copy h1 { font-size: clamp(42px, 5vw, 62px); line-height: 1.35; color: var(--ink); }
+.control-login .login-copy h1 span { color: var(--accent); }
+.control-login .login-copy > p { max-width: 400px; font-size: 16px; }
+.control-login .login-features { gap: 20px; color: var(--muted); font-size: 13px; }
+.control-login .login-card { border-radius: 28px; border-color: var(--line); padding: 38px; box-shadow: 0 18px 70px #24243407; }
+.control-login .login-card h2 { font-size: 28px; margin: 18px 0 8px; letter-spacing: -.7px; }
+.control-login .login-card .small-label { background: #f0edf8; color: #776599; border: 0; }
+.control-login .login-card form { display: grid; gap: 8px; }
+.control-login .login-card .muted { line-height: 1.9; }
+.control-mobile-bar, .sidebar-backdrop { display: none; }
+.session-ended { max-width: 600px; margin: 80px auto; padding: 24px; }
+@media (max-width: 1100px) {
+  .student-app .hero { gap: 36px; }
+  .student-shortcut { padding: 16px; gap: 12px; }
+  .student-shortcut > svg { display: none; }
+  .control-app .admin-sidebar { width: 235px; min-width: 235px; padding-inline: 16px; }
+  .control-app .admin-main { padding-inline: 26px; }
+  .control-app .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .control-login .login-layout { gap: 40px; }
+}
+@media (max-width: 760px) {
+  .student-app .header-inner { min-height: 76px; }
+  .student-app .hero { display: flex; flex-direction: column; align-items: stretch; padding: 34px 0 28px; gap: 24px; }
+  .student-app .hero h1 { font-size: 43px; margin-block: 20px; letter-spacing: -1.4px; }
+  .student-app .hero-copy > p { font-size: 14px; margin-bottom: 22px; }
+  .hero-search { max-width: none; border-radius: 17px; gap: 10px; }
+  .hero-search input { font-size: 13px; }
+  .student-app .hero-note { padding: 23px; margin: 0; border-radius: 24px; }
+  .student-app .note-head { margin-bottom: 18px; }
+  .student-app .hero-note h2 { font-size: 21px; }
+  .student-app .note-lines { margin-top: 16px; }
+  .student-shortcuts { grid-template-columns: 1fr; gap: 10px; margin-bottom: 36px; }
+  .student-shortcut { padding: 15px 18px; border-radius: 18px; }
+  .student-shortcut > svg { display: block; }
+  .student-shortcut small { font-size: 12px; }
+  .student-app .resource-grid, .student-app .subjects-grid { grid-template-columns: 1fr; gap: 16px; }
+  .student-app .resource-card { padding: 23px; }
+  .student-app .section-heading h2 { font-size: 23px; }
+  .student-app .section-heading { gap: 12px; }
+  .student-app .announcement-strip { margin: 30px 0; padding: 22px; }
+  .student-app .sources-grid { grid-template-columns: 1fr; gap: 14px; }
+  .student-app .source-card { padding: 23px; }
+  .student-app .site-footer { margin-top: 44px; padding-bottom: 106px; }
+  .student-app .page-intro { padding-top: 30px; }
+  .control-app .admin-layout { display: block; }
+  .control-mobile-bar { display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 75; padding: 14px 20px; background: #ffffffed; backdrop-filter: blur(20px); border-bottom: 1px solid var(--line); }
+  .control-mobile-bar .brand { font-size: 22px; }
+  .control-mobile-bar .logo { width: 40px; height: 40px; background: #272833; color: #fff; }
+  .control-mobile-bar .icon-button { width: 44px; padding: 10px; }
+  .control-app .admin-sidebar { display: none; }
+  .control-app.menu-open .admin-sidebar { display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch; position: fixed; z-index: 70; top: 77px; inset-inline-start: 0; width: min(290px, 85vw); min-width: 0; height: calc(100dvh - 77px); padding: 24px 20px; overflow-y: auto; padding-bottom: max(20px, env(safe-area-inset-bottom)); border: 0; }
+  .control-app.menu-open .sidebar-backdrop { display: block; position: fixed; inset: 77px 0 0; z-index: 65; background: #15152260; border: 0; border-radius: 0; padding: 0; width: 100%; }
+  .control-app .admin-sidebar nav { display: grid; width: auto; order: initial; overflow: visible; }
+  .control-app .admin-sidebar .sidebar-label, .control-app .admin-sidebar .sidebar-user { display: flex; }
+  .control-app .admin-sidebar > .button { margin-inline-start: 0; }
+  .control-app .admin-sidebar > .text-button { margin-top: 10px; }
+  .control-app .admin-main { padding: 30px 20px 40px; }
+  .control-app .admin-top { flex-direction: column; align-items: stretch; gap: 16px; margin-bottom: 26px; }
+  .control-app .admin-top h1 { font-size: 28px; }
+  .control-app .admin-top-actions { padding: 0; align-self: stretch; justify-content: flex-start; }
+  .control-app .stats-grid { gap: 12px; }
+  .control-app .stat-card { padding: 20px 16px; border-radius: 20px; }
+  .control-app .stat-card > span { font-size: 11px; }
+  .control-app .stat-card strong { font-size: 28px; }
+  .control-app .panel { padding: 22px 18px; border-radius: 22px; }
+  .control-app .quick-actions { grid-template-columns: 1fr; gap: 12px; }
+  .control-app .quick-card { padding: 22px; }
+  .control-app .row-actions { flex-wrap: wrap; }
+  .control-login .login-layout { display: flex; flex-direction: column; gap: 30px; padding-top: 36px; padding-bottom: 42px; }
+  .control-login .login-copy h1 { font-size: 40px; margin-bottom: 18px; }
+  .control-login .login-copy > p { font-size: 14px; margin-bottom: 0; }
+  .control-login .login-features { display: none; }
+  .control-login .login-card { padding: 26px; width: 100%; border-radius: 24px; }
+  .control-login .header-inner { padding-block: 14px; }
+  .control-login .site-header .text-button { font-size: 12px; padding-inline: 0; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .student-app .site-header, .student-app .mobile-nav, .control-mobile-bar { background: #fff; backdrop-filter: none; }
+}
+.student-app .resource-card .bookmark { width: 44px; height: 44px; }

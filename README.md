@@ -2,6 +2,19 @@
 
 An independent, Arabic-first student library for the Egyptian Institute of Alexandria Academy. Next.js App Router + React + MongoDB Atlas, deployed on Vercel. The platform is not an official institute service. No AI integration is included.
 
+## Separate student and control origins
+
+- Students: https://eia-platform-chi.vercel.app
+- Team sign-in: https://eia-control-obieda.vercel.app/login
+
+The two origins use one Vercel project and database, with separate page entry points and client components. `ADMIN_HOST` must exactly match the control HTTP Host. The student host (including other deployment aliases) returns 404 for `/admin`, `/login`, `/api/admin/*` and `/api/auth/*`. The control origin does not serve the public catalog. Its root redirects to `/admin`; the server validates an active administrator session before rendering the dashboard and redirects anonymous visitors to `/login`. APIs independently enforce the same host boundary and existing role/session checks. Forwarded-host and surface headers cannot choose the control surface. This is application and browser-origin separation, not separate infrastructure or database isolation.
+
+There is no administration link in student navigation. Knowing the control URL grants no dashboard access. Existing admin accounts and MFA configuration remain valid, but sign in again on the new host: host-prefixed session cookies cannot transfer between origins.
+
+For local development, `ADMIN_HOST=localhost:3000` gives control access at `http://localhost:3000/login`; open `http://127.0.0.1:3000` for the student surface. Set `PUBLIC_SITE_URL` to the student production HTTPS origin. Missing `ADMIN_HOST` closes private routes rather than exposing administration on every host.
+
+The student interface uses a spacious reading layout, home search, study shortcuts and mobile bottom navigation. Control has its own subdued theme, account-aware navigation, a mobile drawer, and a separate sign-in screen. Student branding choices do not change the control theme.
+
 ## Included
 
 - Responsive RTL library, course spaces, profile filters (department/year/term), announcements, saved resources on the current device, and original institute service links.
@@ -32,7 +45,7 @@ Fill `MONGODB_URI`, use a dedicated `MONGODB_DB` (default `eia_platform`), and c
 
 1. Generate a private setup token: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
 2. Set `ADMIN_SETUP_TOKEN` in the server environment. On Vercel add it as an encrypted variable, then redeploy.
-3. Visit `/admin` and enter the token, name, email and a password of at least 12 characters.
+3. Visit `/login` on the configured control origin and enter the token, name, email and a password of at least 12 characters.
 4. Remove `ADMIN_SETUP_TOKEN` and redeploy after successful setup. A unique, fixed owner ID prevents a second setup even under concurrent requests.
 5. Add editors/admins from the dashboard. The owner account cannot be disabled through this UI. Recovery requires a trusted operator with database access; no insecure public password-reset endpoint is provided.
 

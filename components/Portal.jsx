@@ -325,7 +325,7 @@ export default function Portal() {
     );
   }
   return (
-    <div data-accent={catalog.settings?.accent || "emerald"}>
+    <div className="student-app" data-accent={catalog.settings?.accent || "emerald"}>
       <header className="site-header">
         <div className="header-inner">
           <Brand title={catalog.settings?.title} />
@@ -338,6 +338,7 @@ export default function Portal() {
             ].map(([id, label]) => (
               <button
                 key={id}
+                aria-current={tab === id ? "page" : undefined}
                 className={tab === id ? "active" : ""}
                 onClick={() => navigate(id)}
               >
@@ -355,9 +356,7 @@ export default function Portal() {
                 {YEARS[Number(profile.year) - 1]} · {dep?.name}
               </span>
             </button>
-            <a className="admin-link" href="/admin" aria-label="لوحة الإدارة">
-              <Icon name="grid" size={19} />
-            </a>
+
           </div>
         </div>
       </header>
@@ -385,25 +384,18 @@ export default function Portal() {
                   <span className="dot" /> مساحة طلابية مستقلة
                 </span>
                 <h1>
-                  كل محاضرة.
+                  دراستك،
                   <br />
-                  <span>في مكانها.</span>
+                  <span>بوضوح أكتر.</span>
                 </h1>
                 <p>
                   {catalog.settings?.description ||
                     "موادك ومحاضراتك وروابطك المهمة، جاهزة لما تحتاجها. اختار مسارك الدراسي وابدأ من هنا."}
                 </p>
-                <div className="hero-actions">
-                  <button onClick={() => navigate("library")}>
-                    افتح المكتبة <Icon name="arrow" size={19} />
-                  </button>
-                  <button
-                    className="secondary"
-                    onClick={() => setProfileOpen(true)}
-                  >
-                    اختار موادي
-                  </button>
-                </div>
+                <form className="hero-search" onSubmit={(event) => { event.preventDefault(); const query = q; navigate("library"); setQ(query); }}>
+                  <Icon name="search" size={21} /><input aria-label="ابحث عن محاضرة أو ملخص" placeholder="محاضرة، ملخص، أو اسم مادة…" value={q} onChange={(event) => setQ(event.target.value)} /><button type="submit" aria-label="البحث في المكتبة"><Icon name="arrow" size={20} /></button>
+                </form>
+                <button className="text-button" onClick={() => navigate("library")}>تصفّح المكتبة <Icon name="arrow" size={17} /></button>
               </div>
               <div className="hero-note">
                 <div className="note-head">
@@ -440,6 +432,9 @@ export default function Portal() {
                 </button>
               </div>
             </section>
+            <div className="student-shortcuts" aria-label="اختصارات الدراسة">
+              {[["subjects", "book", "موادي", "مرتبة حسب مسارك"], ["saved", "save", "محفوظاتي", "ارجع للمهم بسهولة"], ["sources", "link", "خدمات المعهد", "النتائج والروابط الأصلية"]].map(([id, icon, title, description]) => <button key={id} className="student-shortcut" onClick={() => navigate(id)}><span className="shortcut-icon"><Icon name={icon} /></span><span><strong>{title}</strong><small>{description}</small></span><Icon name="arrow" size={17} /></button>)}
+            </div>
             <div className="section-heading">
               <div>
                 <p className="eyebrow">ابدأ من آخر إضافة</p>
@@ -783,7 +778,6 @@ export default function Portal() {
               قناة الطلبة ↗
             </a>
           )}
-          <a href="/admin">الإدارة</a>
         </div>
       </footer>
       <nav className="mobile-nav" aria-label="التنقل على الموبايل">

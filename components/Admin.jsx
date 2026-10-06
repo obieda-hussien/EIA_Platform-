@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   api,
   Brand,
@@ -61,23 +61,15 @@ const DEFAULTS = {
   },
   admins: { name: "", email: "", password: "", role: "editor", active: true },
 };
-export default function Admin() {
-  const [user, setUser] = useState(null),
+export default function Admin({ initialUser = null, publicUrl = "https://eia-platform-chi.vercel.app" }) {
+  const [user, setUser] = useState(initialUser),
     [data, setData] = useState(null),
     [tab, setTab] = useState("overview"),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
-    [setup, setSetup] = useState(false),
-    [setupEnabled, setSetupEnabled] = useState(false);
-  const [credentials, setCredentials] = useState({
-      email: "",
-      password: "",
-      name: "",
-      setupToken: "",
-      code: "",
-    }),
-    [pending, setPending] = useState(false),
+    [menuOpen, setMenuOpen] = useState(false);
+  const [pending, setPending] = useState(false),
     [editing, setEditing] = useState(null),
     [form, setForm] = useState({}),
     [file, setFile] = useState(null),
@@ -87,6 +79,24 @@ export default function Admin() {
     [subjectFilter, setSubjectFilter] = useState(""),
     [page, setPage] = useState(1),
     [confirmation, setConfirmation] = useState(null);
+  const menuButton = useRef(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const sidebar = document.getElementById("control-navigation");
+    const mobile = window.matchMedia?.("(max-width: 760px)").matches;
+    if (mobile) sidebar?.querySelector("nav button")?.focus();
+    const close = (event) => {
+      if (event.key === "Escape") { setMenuOpen(false); menuButton.current?.focus(); }
+      if (mobile && event.key === "Tab") {
+        const stops = [menuButton.current, ...sidebar.querySelectorAll("a[href], button:not(:disabled)")].filter(Boolean);
+        const first = stops[0], last = stops.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [menuOpen]);
   useEffect(() => {
     setPage(1);
   }, [tab, filter, statusFilter, subjectFilter]);
@@ -101,9 +111,7 @@ export default function Admin() {
       } else {
         setUser(null);
         setData(null);
-        const state = await api("auth/status");
-        setSetup(state.setupRequired);
-        setSetupEnabled(state.setupEnabled);
+        window.location.replace("/login");
       }
     } catch (e) {
       if (e.status === 401) {
@@ -131,29 +139,12 @@ export default function Admin() {
         setData(null);
         setEditing(null);
         setConfirmation(null);
-        setSetup(false);
+        window.location.replace("/login");
       }
       setError(e.message);
     } finally {
       setPending(false);
     }
-  }
-  async function login(e) {
-    e.preventDefault();
-    await act(async () => {
-      await api(`auth/${setup ? "setup" : "login"}`, {
-        method: "POST",
-        body: JSON.stringify(credentials),
-      });
-      setCredentials({
-        email: "",
-        password: "",
-        name: "",
-        setupToken: "",
-        code: "",
-      });
-      await boot();
-    });
   }
   function edit(entity, item = null) {
     setError("");
@@ -216,7 +207,7 @@ export default function Admin() {
       await api("auth/logout", { method: "POST", body: "{}" });
       setUser(null);
       setData(null);
-      await boot();
+      window.location.replace("/login");
     });
   }
   const list = adminRecords(data, tab, {
@@ -276,159 +267,18 @@ export default function Admin() {
       </div>
     );
   }
-  if (!user)
-    return (
-      <>
-        <header className="site-header">
-          <div className="header-inner">
-            <Brand />
-            <a className="text-button" href="/">
-              عرض الموقع ←
-            </a>
-          </div>
-        </header>
-        <main className="login-layout container">
-          <div className="login-copy">
-            <p className="eyebrow">EIA PLATFORM / إدارة المحتوى</p>
-            <h1>
-              مكان واحد.
-              <br />
-              <span>إدارة واضحة.</span>
-            </h1>
-            <p>نظّم المواد، انشر المحاضرات، وخلي آخر تحديث يوصل للطلبة.</p>
-            <div className="login-features">
-              <span>
-                <Icon name="link" /> روابط Drive وتيليجرام
-              </span>
-              <span>
-                <Icon name="file" /> ملفات PDF خفيفة
-              </span>
-              <span>
-                <Icon name="user" /> صلاحيات للأدمنز والمحررين
-              </span>
-            </div>
-          </div>
-          <section className="login-card">
-            <span className="small-label">لوحة الإدارة</span>
-            <h2>{setup ? "تأسيس حساب المالك" : "أهلًا بعودتك"}</h2>
-            <p className="muted">
-              {setup
-                ? "استخدم رمز التأسيس من إعدادات Vercel، ثم اختار بيانات حسابك."
-                : "سجّل دخولك لإدارة محتوى المنصة."}
-            </p>
-            <Notice error>{error}</Notice>
-            {loading ? (
-              <p role="status">جاري التحقق من إعدادات المنصة…</p>
-            ) : (
-              <form onSubmit={login}>
-                {setup && (
-                  <>
-                    <Field label="اسمك">
-                      <input
-                        required
-                        value={credentials.name}
-                        onChange={(e) =>
-                          setCredentials({
-                            ...credentials,
-                            name: e.target.value,
-                          })
-                        }
-                        autoComplete="name"
-                      />
-                    </Field>
-                    <Field label="رمز التأسيس">
-                      <input
-                        required
-                        type="password"
-                        value={credentials.setupToken}
-                        onChange={(e) =>
-                          setCredentials({
-                            ...credentials,
-                            setupToken: e.target.value,
-                          })
-                        }
-                        autoComplete="off"
-                      />
-                    </Field>
-                    {!setupEnabled && (
-                      <Notice error>
-                        أضف ADMIN_SETUP_TOKEN إلى إعدادات Vercel لتأسيس الحساب.
-                      </Notice>
-                    )}
-                  </>
-                )}
-                <Field label="البريد الإلكتروني">
-                  <input
-                    required
-                    type="email"
-                    dir="ltr"
-                    value={credentials.email}
-                    onChange={(e) =>
-                      setCredentials({ ...credentials, email: e.target.value })
-                    }
-                    autoComplete="username"
-                  />
-                </Field>
-                <Field label="كلمة المرور">
-                  <input
-                    required
-                    type="password"
-                    minLength={setup ? 12 : 1}
-                    maxLength={128}
-                    value={credentials.password}
-                    onChange={(e) =>
-                      setCredentials({
-                        ...credentials,
-                        password: e.target.value,
-                      })
-                    }
-                    autoComplete={setup ? "new-password" : "current-password"}
-                  />
-                </Field>
-                {!setup && (
-                  <Field label="رمز المصادقة أو الاسترداد — إذا فعّلت التحقق بخطوتين">
-                    <input
-                      dir="ltr"
-                      autoComplete="one-time-code"
-                      maxLength={20}
-                      value={credentials.code || ""}
-                      onChange={(e) =>
-                        setCredentials({
-                          ...credentials,
-                          code: e.target.value.trim(),
-                        })
-                      }
-                    />
-                  </Field>
-                )}
-                <button
-                  className="full"
-                  disabled={pending || (setup && !setupEnabled)}
-                >
-                  {pending
-                    ? "جاري التنفيذ…"
-                    : setup
-                      ? "إنشاء حساب المالك"
-                      : "تسجيل الدخول"}{" "}
-                  <Icon name="arrow" size={18} />
-                </button>
-              </form>
-            )}
-            <button className="text-button" onClick={boot}>
-              إعادة التحقق من الاتصال
-            </button>
-          </section>
-        </main>
-      </>
-    );
+  if (!user) return <main className="session-ended"><Notice error>انتهت جلستك. سجّل الدخول للمتابعة.</Notice><a className="button" href="/login">تسجيل الدخول</a></main>;
   return (
     <div
-      className="admin-layout"
-      data-accent={data?.settings?.accent || "emerald"}
+      className={`admin-layout control-app ${menuOpen ? "menu-open" : ""}`}
+      data-accent="violet"
     >
-      <aside className="admin-sidebar">
-        <Brand />
-        <p className="sidebar-label">مساحة الإدارة</p>
+      <div className="control-mobile-bar"><Brand href="/admin" subtitle="CONTROL" /><button className="secondary icon-button" aria-label={menuOpen ? "إغلاق قائمة الإدارة" : "فتح قائمة الإدارة"} aria-expanded={menuOpen} ref={menuButton} aria-controls="control-navigation" onClick={() => setMenuOpen(!menuOpen)}><Icon name={menuOpen ? "close" : "menu"} /></button></div>
+      {menuOpen && <button className="sidebar-backdrop" aria-label="إغلاق قائمة الإدارة" onClick={() => setMenuOpen(false)} />}
+      <aside id="control-navigation" className="admin-sidebar">
+        <Brand href="/admin" subtitle="CONTROL" />
+        <div className="control-badge"><Icon name="shield" size={16} /> مساحة فريق المنصة</div>
+        <p className="sidebar-label">إدارة المحتوى</p>
         <nav>
           {TABS.filter(
             ([id]) =>
@@ -437,9 +287,11 @@ export default function Admin() {
           ).map(([id, label, icon]) => (
             <button
               key={id}
+              aria-current={tab === id ? "page" : undefined}
               className={tab === id ? "active" : ""}
               onClick={() => {
                 setTab(id);
+                setMenuOpen(false);
                 setFilter("");
                 setStatusFilter("");
                 setSubjectFilter("");
@@ -459,8 +311,8 @@ export default function Admin() {
             <span>{ROLES[user.role]}</span>
           </div>
         </div>
-        <a className="secondary button" href="/">
-          عرض الموقع ↗
+        <a className="secondary button" href={publicUrl} target="_blank" rel="noopener noreferrer">
+          فتح منصة الطلبة ↗
         </a>
         <button className="text-button" disabled={pending} onClick={logout}>
           تسجيل الخروج
@@ -472,7 +324,8 @@ export default function Admin() {
             <p className="eyebrow">
               لوحة الإدارة / {TABS.find((t) => t[0] === tab)?.[1]}
             </p>
-            <h1>{TABS.find((t) => t[0] === tab)?.[1]}</h1>
+            <h1>{tab === "overview" ? `أهلًا، ${user.name.split(" ")[0]}` : TABS.find((t) => t[0] === tab)?.[1]}</h1>
+            <p className="control-context">{tab === "overview" ? "نظرة واضحة على منصتك. ابدأ بخطوة واحدة." : "مساحة منظّمة لإنجاز المهمة، بدون تشتيت."}</p>
           </div>
           <div className="admin-top-actions">
             <button

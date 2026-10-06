@@ -1,6 +1,7 @@
 import { ObjectId, Binary } from "mongodb";
 import { db } from "../../../lib/db.mjs";
 import { readLimited } from "../../../lib/http.mjs";
+import { surfaceAllows } from "../../../lib/surface.mjs";
 import {
   validateRoute,
   clientKey,
@@ -520,6 +521,8 @@ async function dispatch(req, context) {
   throw new AppError("المسار غير موجود.", 404);
 }
 async function handle(req, context) {
+  if (!surfaceAllows(req.headers.get("host"), new URL(req.url).pathname))
+    return json({ error: "الصفحة غير موجودة." }, 404);
   try {
     return await dispatch(req, context);
   } catch (e) {

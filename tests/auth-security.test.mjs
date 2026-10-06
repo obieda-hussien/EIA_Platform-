@@ -176,7 +176,7 @@ function reset(role = "owner", options = {}) {
   globalThis.__eiaDb = database();
 }
 async function request(path, method = "GET", data, extra = {}) {
-  const headers = {
+  const headers = { host: "eia.example",
     ...(method !== "GET" ? { origin, "content-type": "application/json" } : {}),
     ...extra,
   };
@@ -191,6 +191,7 @@ async function request(path, method = "GET", data, extra = {}) {
   return { status: result.status, data: await result.json() };
 }
 before(async () => {
+  process.env.ADMIN_HOST = "eia.example";
   passwordHash = await hashPassword("secure-owner-test-password");
   await mkdir(
     fileURLToPath(new URL("../node_modules/.cache", import.meta.url)),

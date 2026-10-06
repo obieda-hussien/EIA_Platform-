@@ -162,7 +162,7 @@ after(async () => {
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 async function mount(Component) {
   await act(async () => {
-    root.render(React.createElement(Component));
+    root.render(React.createElement(Component, Component === Admin ? { initialUser: user } : {}));
     await tick();
   });
 }
@@ -342,4 +342,27 @@ test("Admins can enroll MFA and save recovery codes without exposing them elsewh
   assert.equal(document.querySelectorAll(".recovery-codes code").length, 8);
   await click(button("حفظتها في مكان آمن"));
   assert.equal(document.querySelectorAll(".recovery-codes code").length, 0);
+});
+
+test("Student home search carries its query into the library and has no admin links", async () => {
+  await mount(Portal);
+  assert.equal(document.querySelector('a[href="/admin"]'), null);
+  const search = document.querySelector('[aria-label="ابحث عن محاضرة أو ملخص"]');
+  await change(search, "إدارة الأعمال 2");
+  await act(async () => {
+    search.closest("form").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+    await tick();
+  });
+  assert.equal(document.querySelector('[aria-label="بحث في المكتبة"]').value, "إدارة الأعمال 2");
+  assert.match(document.querySelector("h1").textContent, /المكتبة الدراسية/);
+});
+test("Control navigation opens, switches section and closes without losing dashboard tools", async () => {
+  await mount(Admin);
+  const toggle = document.querySelector('[aria-controls="control-navigation"]');
+  await click(toggle); assert.equal(toggle.getAttribute("aria-expanded"), "true");
+  await click(button("إعدادات المنصة"));
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  assert.match(document.querySelector("h1").textContent, /إعدادات المنصة/);
+  const studentLink = document.querySelector('.admin-sidebar a[target="_blank"]');
+  assert.equal(studentLink.href, "https://eia-platform-chi.vercel.app/");
 });

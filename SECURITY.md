@@ -54,3 +54,12 @@ Dependencies are checked with npm audit in CI; weekly Dependabot configuration c
 ## Verification
 
 Run `npm run check`, `npm test`, `npm run build`, `npm run test:access`, and `npm audit --omit=dev --audit-level=high`. Tests cover RFC 6238 vectors, encryption integrity, one-time code consumption, replay, idle/legacy/disabled sessions, permissions, session ownership, password reauthentication, MFA enrollment expiry, sanitized projections, origin enforcement, malformed routes, bounded streams, cache coalescing, CSP nonces and UI interactions. Authenticated API tests substitute database/cookie boundaries with isolated fixtures; production access tests use a real Next.js server without database credentials. They do not constitute an independent penetration test, live Atlas CRUD test or volumetric DDoS test.
+
+
+## Control surface isolation
+
+Production `ADMIN_HOST=eia-control-obieda.vercel.app` is an exact HTTP Host allowlist. The proxy, protected server pages and API handler enforce it independently; the student origin and other deployment aliases return 404 for private pages and APIs. Control pages are marked noindex and have no-store responses. Incoming forwarded-host or custom surface headers never authorize access. Public APIs are unavailable on the control origin. Static JavaScript/CSS are public assets and contain no authorization secrets; route obscurity is not an access-control mechanism.
+
+`/admin` calls the same database-backed session verifier used by the API before returning the dashboard component. Anonymous visitors see only the separate `/login` component. Revoked, idle, inactive, stale-auth-version or MFA-unverified sessions cannot authorize the dashboard. Existing host-prefixed cookies do not cross the two origins; sign in afresh on the control origin. Owner/admin/editor enforcement remains in the API, irrespective of navigation visibility. Both origins run on one deployment/database; a distinct host is not a substitute for network or infrastructure isolation.
+
+Production-server regression tests exercise both actual Host authorities through Node HTTP requests, including student API denial with spoofed forwarding headers, server redirects before dashboard rendering, cross-origin write rejection, login routing and no admin links in student HTML. Node native fetch replaces an explicitly supplied Host, so the test transport uses HTTP requests for those cases.

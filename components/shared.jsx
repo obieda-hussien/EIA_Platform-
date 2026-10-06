@@ -47,6 +47,9 @@ export async function api(path, options = {}) {
 }
 export function Icon({ name = "book", size = 22 }) {
   const paths = {
+    menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+    close: <path d="m6 6 12 12M6 18 18 6" />,
+    shield: <path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6zM8 12l3 3 5-6" />,
     refresh: (
       <>
         <path d="M20 7a8 8 0 1 0 1 7" />
@@ -128,15 +131,15 @@ export function Icon({ name = "book", size = 22 }) {
     </svg>
   );
 }
-export function Brand({ title = "EIA" }) {
+export function Brand({ title = "EIA", href = "/", subtitle = "PLATFORM" }) {
   return (
-    <a className="brand" href="/">
+    <a className="brand" href={href}>
       <span className="logo">
         <Icon />
       </span>
       <span>
         {title === "EIA Platform" ? "EIA" : title}
-        <span className="brand-small">PLATFORM</span>
+        <span className="brand-small">{subtitle}</span>
       </span>
     </a>
   );
