@@ -47,6 +47,20 @@ export async function api(path, options = {}) {
 }
 export function Icon({ name = "book", size = 22 }) {
   const paths = {
+    refresh: (
+      <>
+        <path d="M20 7a8 8 0 1 0 1 7" />
+        <path d="M20 3v5h-5" />
+      </>
+    ),
+    share: (
+      <>
+        <circle cx="18" cy="5" r="3" />
+        <circle cx="6" cy="12" r="3" />
+        <circle cx="18" cy="19" r="3" />
+        <path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4" />
+      </>
+    ),
     book: (
       <>
         <path d="M4 4h6a3 3 0 0 1 3 3v14a4 4 0 0 0-4-3H4z" />

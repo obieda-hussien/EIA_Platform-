@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --test tests/contracts.test.mjs tests/http.test.mjs",
+    "test": "node --test tests/contracts.test.mjs tests/http.test.mjs tests/catalog.test.mjs tests/ui.test.mjs",
     "test:access": "node --test tests/access.test.mjs",
     "check": "node --check lib/validation.mjs && node --check lib/security.mjs"
   },
@@ -19,5 +19,9 @@
     "next": "16.3.8",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.5",
+    "jsdom": "^26.1.0"
   }
 }

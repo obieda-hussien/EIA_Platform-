@@ -12,6 +12,7 @@ import {
   Field,
 } from "./shared";
 import { DEPARTMENTS, normalize } from "../lib/validation.mjs";
+import { resourceShareUrl, sortResources } from "../lib/catalog.mjs";
 const YEARS = ["الأولى", "الثانية", "الثالثة", "الرابعة"];
 const SOURCES = [
   {
@@ -68,7 +69,13 @@ export default function Portal() {
     [subject, setSubject] = useState(""),
     [kind, setKind] = useState(""),
     [view, setView] = useState(null),
-    [ready, setReady] = useState(false);
+    [ready, setReady] = useState(false),
+    [completed, setCompleted] = useState([]),
+    [order, setOrder] = useState("newest"),
+    [lecture, setLecture] = useState(""),
+    [progressFilter, setProgressFilter] = useState(""),
+    [message, setMessage] = useState(""),
+    [shareUrl, setShareUrl] = useState("");
   async function load() {
     setLoading(true);
     setError("");
@@ -89,6 +96,9 @@ export default function Portal() {
     try {
       const p = JSON.parse(localStorage.getItem("eia_profile"));
       const s = JSON.parse(localStorage.getItem("eia_saved"));
+      const c = JSON.parse(localStorage.getItem("eia_completed"));
+      if (Array.isArray(c))
+        setCompleted(c.filter((x) => typeof x === "string"));
       if (
         p &&
         DEPARTMENTS.some((d) => d.id === p.department) &&
@@ -112,11 +122,72 @@ export default function Portal() {
       try {
         localStorage.setItem("eia_profile", JSON.stringify(profile));
         localStorage.setItem("eia_saved", JSON.stringify(saved));
+        localStorage.setItem("eia_completed", JSON.stringify(completed));
       } catch {
         /* Keep navigation usable when browser storage is unavailable. */
       }
     }
-  }, [profile, saved, ready]);
+  }, [profile, saved, completed, ready]);
+  useEffect(() => {
+    if (loading || error) return;
+    function restoreResource() {
+      const id = new URL(window.location.href).searchParams.get("resource");
+      if (!id) {
+        setView(null);
+        return;
+      }
+      const resource = catalog.resources.find((r) => r._id === id);
+      setTab("library");
+      setView(resource || null);
+      setShareUrl("");
+      setMessage(
+        resource
+          ? ""
+          : "المحتوى اللي في الرابط غير متاح حاليًا؛ ممكن يكون اتأرشف أو لم يُنشر.",
+      );
+    }
+    restoreResource();
+    window.addEventListener("popstate", restoreResource);
+    return () => window.removeEventListener("popstate", restoreResource);
+  }, [catalog, loading, error]);
+  function closeResource() {
+    setView(null);
+    setShareUrl("");
+    setMessage("");
+    const url = new URL(window.location.href);
+    url.searchParams.delete("resource");
+    window.history.replaceState(null, "", url);
+  }
+  function openResource(resource) {
+    setView(resource);
+    setShareUrl("");
+    setMessage("");
+    window.history.pushState(
+      null,
+      "",
+      resourceShareUrl(window.location.origin, resource._id),
+    );
+  }
+  async function shareResource(resource) {
+    const url = resourceShareUrl(window.location.origin, resource._id);
+    setShareUrl(url);
+    try {
+      if (navigator.share)
+        await navigator.share({ title: resource.title, url });
+      else {
+        await navigator.clipboard.writeText(url);
+        setMessage("تم نسخ رابط المحتوى.");
+      }
+    } catch (e) {
+      if (e.name !== "AbortError")
+        setMessage("تقدر تنسخ الرابط من الخانة وتبعته لزمايلك.");
+    }
+  }
+  function toggleComplete(id) {
+    setCompleted((current) =>
+      current.includes(id) ? current.filter((x) => x !== id) : [...current, id],
+    );
+  }
   const mySubjects = useMemo(
     () =>
       catalog.subjects.filter(
@@ -144,21 +215,42 @@ export default function Portal() {
         ? catalog.resources.filter((r) => saved.includes(r._id))
         : available;
     const term = normalize(q);
-    return list.filter(
-      (r) =>
-        (!subject || r.subjectId === subject) &&
-        (!kind || r.kind === kind) &&
-        (!term ||
-          normalize(
-            `${r.title} ${r.description} ${r.source} ${catalog.subjects.find((s) => s._id === r.subjectId)?.name || ""}`,
-          ).includes(term)),
+    return sortResources(
+      list.filter(
+        (r) =>
+          (!subject || r.subjectId === subject) &&
+          (!kind || r.kind === kind) &&
+          (lecture === "" || r.lecture === Number(lecture)) &&
+          (!progressFilter ||
+            completed.includes(r._id) === (progressFilter === "done")) &&
+          (!term ||
+            normalize(
+              `${r.title} ${r.description} ${r.source} ${catalog.subjects.find((s) => s._id === r.subjectId)?.name || ""}`,
+            ).includes(term)),
+      ),
+      order,
     );
-  }, [tab, catalog, saved, available, q, subject, kind]);
+  }, [
+    tab,
+    catalog,
+    saved,
+    available,
+    q,
+    subject,
+    kind,
+    lecture,
+    progressFilter,
+    completed,
+    order,
+  ]);
   function navigate(next) {
     setTab(next);
     setQ("");
     setSubject("");
     setKind("");
+    setLecture("");
+    setProgressFilter("");
+    closeResource();
   }
   function toggleSave(id) {
     setSaved((list) =>
@@ -186,6 +278,12 @@ export default function Portal() {
             <Icon name="save" />
           </button>
         </div>
+        {completed.includes(r._id) && (
+          <span className="completed-label">
+            <Icon name="check" size={15} />
+            تمت المذاكرة
+          </span>
+        )}
         <p className="eyebrow">
           {s?.name}
           {r.lecture > 0 ? ` · محاضرة ${r.lecture}` : ""}
@@ -200,7 +298,10 @@ export default function Portal() {
             {new Date(r.updatedAt).toLocaleDateString("ar-EG")}
           </time>
         </div>
-        <button className="resource-open secondary" onClick={() => setView(r)}>
+        <button
+          className="resource-open secondary"
+          onClick={() => openResource(r)}
+        >
           فتح المحتوى <Icon name="arrow" size={18} />
         </button>
       </article>
@@ -210,15 +311,21 @@ export default function Portal() {
     return list.length ? (
       <div className="resource-grid">{list.map(card)}</div>
     ) : (
-      <Empty title={q ? "مفيش نتائج مطابقة" : "مفيش ملفات متاحة حاليًا"}>
-        {q
-          ? "جرّب اسم مادة أو كلمة أقصر."
+      <Empty
+        title={
+          q || subject || kind || lecture || progressFilter
+            ? "مفيش نتائج مطابقة"
+            : "مفيش ملفات متاحة حاليًا"
+        }
+      >
+        {q || subject || kind || lecture || progressFilter
+          ? "جرّب بحثًا مختلفًا أو امسح الفلاتر."
           : "المحتوى المنشور هيظهر هنا بمجرد إضافته من الإدارة."}
       </Empty>
     );
   }
   return (
-    <>
+    <div data-accent={catalog.settings?.accent || "emerald"}>
       <header className="site-header">
         <div className="header-inner">
           <Brand title={catalog.settings?.title} />
@@ -255,6 +362,13 @@ export default function Portal() {
         </div>
       </header>
       <main className="container">
+        {catalog.settings?.bannerText && (
+          <div className="platform-banner">
+            <Icon name="news" size={20} />
+            <span>{catalog.settings.bannerText}</span>
+          </div>
+        )}
+        {!view && <Notice>{message}</Notice>}
         {error && (
           <Notice error>
             {error}{" "}
@@ -310,7 +424,12 @@ export default function Portal() {
                   </div>
                   <div>
                     <span>ملفاتك المحفوظة</span>
-                    <strong>{saved.length}</strong>
+                    <strong>
+                      {
+                        catalog.resources.filter((r) => saved.includes(r._id))
+                          .length
+                      }
+                    </strong>
                   </div>
                 </div>
                 <button
@@ -340,7 +459,7 @@ export default function Portal() {
                 ))}
               </div>
             ) : (
-              resourceGrid(available.slice(0, 6))
+              resourceGrid(sortResources(available).slice(0, 6))
             )}
             <section className="announcement-strip">
               <div>
@@ -407,7 +526,10 @@ export default function Portal() {
               <select
                 aria-label="المادة"
                 value={subject}
-                onChange={(e) => setSubject(e.target.value)}
+                onChange={(e) => {
+                  setSubject(e.target.value);
+                  setLecture("");
+                }}
               >
                 <option value="">كل المواد</option>
                 {(tab === "saved" ? catalog.subjects : mySubjects).map((s) => (
@@ -428,6 +550,63 @@ export default function Portal() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="filter-bar library-options">
+              <select
+                aria-label="ترتيب المحتوى"
+                value={order}
+                onChange={(e) => setOrder(e.target.value)}
+              >
+                <option value="newest">الأحدث أولًا</option>
+                <option value="lecture">ترتيب المحاضرات</option>
+                <option value="title">حسب العنوان</option>
+              </select>
+              <select
+                aria-label="رقم المحاضرة"
+                value={lecture}
+                onChange={(e) => setLecture(e.target.value)}
+              >
+                <option value="">كل المحاضرات</option>
+                {[
+                  ...new Set(
+                    (tab === "saved"
+                      ? catalog.resources.filter((r) => saved.includes(r._id))
+                      : available
+                    )
+                      .filter((r) => !subject || r.subjectId === subject)
+                      .map((r) => r.lecture),
+                  ),
+                ]
+                  .sort((a, b) => a - b)
+                  .map((n) => (
+                    <option key={n} value={n}>
+                      {n === 0 ? "محتوى عام" : `محاضرة ${n}`}
+                    </option>
+                  ))}
+              </select>
+              <select
+                aria-label="حالة المذاكرة"
+                value={progressFilter}
+                onChange={(e) => setProgressFilter(e.target.value)}
+              >
+                <option value="">كل المحتوى</option>
+                <option value="todo">لسه هذاكره</option>
+                <option value="done">تمت المذاكرة</option>
+              </select>
+              {(q || subject || kind || lecture || progressFilter) && (
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    setQ("");
+                    setSubject("");
+                    setKind("");
+                    setLecture("");
+                    setProgressFilter("");
+                  }}
+                >
+                  مسح الفلاتر
+                </button>
+              )}
             </div>
             <p className="result-count">
               {loading ? "جاري التحميل…" : `${filtered.length} محتوى متاح`}
@@ -474,6 +653,34 @@ export default function Portal() {
                         .filter(Boolean)
                         .join(" · ")}
                     </p>
+                    <div className="study-progress">
+                      <progress
+                        aria-label={`تقدم مذاكرة ${s.name}`}
+                        value={
+                          available.filter(
+                            (r) =>
+                              r.subjectId === s._id &&
+                              completed.includes(r._id),
+                          ).length
+                        }
+                        max={Math.max(
+                          1,
+                          available.filter((r) => r.subjectId === s._id).length,
+                        )}
+                      />
+                      <small>
+                        {
+                          available.filter(
+                            (r) =>
+                              r.subjectId === s._id &&
+                              completed.includes(r._id),
+                          ).length
+                        }{" "}
+                        من{" "}
+                        {available.filter((r) => r.subjectId === s._id).length}{" "}
+                        تمت مذاكرته
+                      </small>
+                    </div>
                     <span>
                       {available.filter((r) => r.subjectId === s._id).length}{" "}
                       ملف وروابط <Icon name="arrow" size={18} />
@@ -567,6 +774,15 @@ export default function Portal() {
           <button className="text-button" onClick={() => navigate("sources")}>
             المصادر والخدمات
           </button>
+          {catalog.settings?.communityUrl && (
+            <a
+              href={catalog.settings.communityUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              قناة الطلبة ↗
+            </a>
+          )}
           <a href="/admin">الإدارة</a>
         </div>
       </footer>
@@ -701,7 +917,17 @@ export default function Portal() {
         </Modal>
       )}
       {view && (
-        <Modal title={view.title} onClose={() => setView(null)}>
+        <Modal title={view.title} onClose={closeResource}>
+          <Notice>{message}</Notice>
+          <div className="resource-detail-meta">
+            <span className="tag mint">
+              {catalog.subjects.find((s) => s._id === view.subjectId)?.name}
+            </span>
+            <span className="tag">
+              {KINDS[view.kind]} ·{" "}
+              {view.lecture ? `محاضرة ${view.lecture}` : "محتوى عام"}
+            </span>
+          </div>
           <p className="muted">{view.description}</p>
           {view.source && (
             <p className="source-note">المصدر / صاحب المحتوى: {view.source}</p>
@@ -754,13 +980,45 @@ export default function Portal() {
               </a>
             </div>
           ))}
-          <button className="text-button" onClick={() => toggleSave(view._id)}>
-            {saved.includes(view._id)
-              ? "إزالة من المحفوظات"
-              : "حفظ للرجوع إليه"}
-          </button>
+          <div className="resource-actions">
+            <button
+              className="secondary"
+              aria-pressed={completed.includes(view._id)}
+              onClick={() => toggleComplete(view._id)}
+            >
+              <Icon name="check" size={18} />
+              {completed.includes(view._id)
+                ? "تمت المذاكرة ✓"
+                : "علّم كمحتوى تمت مذاكرته"}
+            </button>
+            <button className="secondary" onClick={() => shareResource(view)}>
+              <Icon name="share" size={18} />
+              مشاركة
+            </button>
+            <button
+              className="text-button"
+              onClick={() => toggleSave(view._id)}
+            >
+              {saved.includes(view._id)
+                ? "إزالة من المحفوظات"
+                : "حفظ للرجوع إليه"}
+            </button>
+          </div>
+          {shareUrl && (
+            <Field label="رابط مشاركة المحتوى">
+              <input
+                readOnly
+                dir="ltr"
+                value={shareUrl}
+                onFocus={(e) => e.target.select()}
+              />
+            </Field>
+          )}
+          <p className="muted">
+            المحفوظات وحالة المذاكرة محفوظة على الجهاز ده.
+          </p>
         </Modal>
       )}
-    </>
+    </div>
   );
 }

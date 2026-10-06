@@ -8,6 +8,10 @@ An independent, Arabic-first student library for the Egyptian Institute of Alexa
 - A resource can have up to four Google Drive/Docs or Telegram message links, an uploaded PDF, or both. Telegram links open the original message; private-channel membership is required for private links. Drive sharing permissions remain controlled by the uploader. No automated Google/Telegram upload, scraping, proxying, or guaranteed direct download is implied.
 - PDF uploads up to **2 MiB**, validated by extension and signature, stored as MongoDB Binary inside the resource document. Published PDFs support inline viewing and attachment downloads. Large files use external links. Archived uploads still consume storage; monitor Atlas usage.
 - Admin dashboard: overview, course CRUD, file/link CRUD, drafts/publication/archive/restore, targeted announcements with expiry/pinning, owner-controlled admin accounts, branding settings and recent audit activity.
+- Platform settings have a live preview, three accent colors, an optional student notice and public Telegram community link. Draft edits can be reset before saving. Opening settings safely excludes object-valued overview data from record filtering.
+- Admin lists have Arabic search across course names, titles, attribution and codes, status/course filters, and 20 records per page. Resources and announcements can be copied into a new draft; an existing uploaded PDF must be attached again to the copy. A refresh action reloads the current overview.
+- Students can sort by last update, lecture number or title, filter a specific lecture and study status, and manually mark content completed. Course cards show completed-content progress. Study status and favorites stay on the current device.
+- Each published resource has a shareable `/?resource=<id>` link. It opens the resource details regardless of the recipient's selected study profile; archive and publication rules still apply. Share uses the device share sheet or clipboard, with a visible URL for manual copying.
 - Roles: owner manages accounts/settings; admin also manages courses; editor manages resources/announcements. Authorization is enforced in API handlers, independently of the UI.
 - Passwords hashed with salted scrypt; opaque session tokens hashed in MongoDB; HttpOnly/Secure/SameSite cookies; eight-hour sessions; expiry checked on each request; account changes revoke sessions; persistent rate limits; same-origin mutation checks.
 - Empty, unavailable database and setup states are explicit. The app does not fabricate documents, results or institute endorsement. Course data is entered by the content team.
@@ -52,6 +56,8 @@ npm test
 npm run build
 npm run test:access
 ```
+
+UI interaction tests run React in jsdom with isolated API fixtures: owner settings open/preview/validation/save/reopen, admin filtering and pagination, draft duplication, published deep links, sharing and local study-state persistence. These tests do not write to Atlas or verify browser layout.
 
 Tests cover external-link host/path restrictions, private Telegram links, alternative-link limits, PDF size/signature, publication state and academic input, source validation, Arabic search, salted passwords, setup-token comparisons, streamed request limits and origin enforcement. Access tests start a production server with database configuration deliberately disabled and check protected routes, cross-origin rejection and unavailable states. GitHub Actions runs these tests and a production build. Authenticated CRUD and actual Atlas connectivity need a configured test database; they are not covered by the unavailable-state access checks.
 

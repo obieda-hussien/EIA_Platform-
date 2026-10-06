@@ -20,6 +20,8 @@ import {
   subjectInput,
   resourceInput,
   newsInput,
+  settingsInput,
+  SITE_DEFAULTS,
   validatePdf,
   normalize,
   escapeRegex,
@@ -141,9 +143,7 @@ async function dispatch(req, context) {
       const address = email(b.email);
       await throttle(`login:${address}`, 8);
       await throttle("login-total", 100);
-      const user = await (
-        await db()
-      )
+      const user = await (await db())
         .collection("admins")
         .findOne({ email: address, active: true });
       // Fixed scrypt work also applies when the account does not exist.
@@ -197,10 +197,7 @@ async function dispatch(req, context) {
           subjectIds.has(r.subjectId.toString()),
         ),
         news,
-        settings: settings || {
-          title: "EIA Platform",
-          description: "مكتبتك الدراسية، في مكان واحد.",
-        },
+        settings: { ...SITE_DEFAULTS, ...settings },
       });
     }
     if (entity === "file") {
@@ -279,8 +276,10 @@ async function dispatch(req, context) {
         admins,
         audits,
         storageBytes: storage[0]?.bytes || 0,
-        settings:
-          (await d.collection("settings").findOne({ _id: "site" })) || {},
+        settings: {
+          ...SITE_DEFAULTS,
+          ...(await d.collection("settings").findOne({ _id: "site" })),
+        },
       });
     }
     if (entity === "admins") {
@@ -332,8 +331,7 @@ async function dispatch(req, context) {
         { _id: "site" },
         {
           $set: {
-            title: text(b.title, 100),
-            description: text(b.description, 400),
+            ...settingsInput(b),
             updatedAt: new Date(),
           },
         },

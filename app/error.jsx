@@ -2,10 +2,17 @@
 export default function ErrorPage({ reset }) {
   return (
     <main className="container empty">
-      <h1>تعذر تحميل الصفحة</h1>
-      <p>حاول مرة أخرى.</p>
-      <button onClick={reset}>إعادة المحاولة</button>
-      <a href="/">الرئيسية</a>
+      <h1 className="error-title">تعذر تحميل الصفحة</h1>
+      <p>حاول مرة أخرى، أو ارجع للصفحة الرئيسية.</p>
+      <div className="error-actions">
+        <button onClick={reset}>إعادة المحاولة</button>
+        <a className="button secondary" href="/">
+          الرئيسية
+        </a>
+        <a className="button secondary" href="/admin">
+          لوحة الإدارة
+        </a>
+      </div>
     </main>
   );
 }

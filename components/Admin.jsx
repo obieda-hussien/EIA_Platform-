@@ -14,6 +14,8 @@ import {
   bytes,
 } from "./shared";
 import { DEPARTMENTS, UPLOAD_LIMIT } from "../lib/validation.mjs";
+import { adminRecords } from "../lib/catalog.mjs";
+import Settings from "./Settings";
 const TABS = [
   ["overview", "نظرة عامة", "grid"],
   ["resources", "المحتوى والملفات", "file"],
@@ -78,7 +80,13 @@ export default function Admin() {
     [file, setFile] = useState(null),
     [linkText, setLinkText] = useState(""),
     [filter, setFilter] = useState(""),
+    [statusFilter, setStatusFilter] = useState(""),
+    [subjectFilter, setSubjectFilter] = useState(""),
+    [page, setPage] = useState(1),
     [confirmation, setConfirmation] = useState(null);
+  useEffect(() => {
+    setPage(1);
+  }, [tab, filter, statusFilter, subjectFilter]);
   async function boot() {
     setLoading(true);
     setError("");
@@ -88,11 +96,17 @@ export default function Admin() {
         setUser(result.user);
         setData(await api("admin/overview"));
       } else {
+        setUser(null);
+        setData(null);
         const state = await api("auth/status");
         setSetup(state.setupRequired);
         setSetupEnabled(state.setupEnabled);
       }
     } catch (e) {
+      if (e.status === 401) {
+        setUser(null);
+        setData(null);
+      }
       setError(e.message);
     } finally {
       setLoading(false);
@@ -109,6 +123,13 @@ export default function Admin() {
     try {
       await fn();
     } catch (e) {
+      if (e.status === 401) {
+        setUser(null);
+        setData(null);
+        setEditing(null);
+        setConfirmation(null);
+        setSetup(false);
+      }
       setError(e.message);
     } finally {
       setPending(false);
@@ -189,32 +210,60 @@ export default function Admin() {
       await boot();
     });
   }
-  const list =
-    data?.[tab]?.filter((item) =>
-      `${item.title || item.name || ""} ${item.email || ""}`
-        .toLowerCase()
-        .includes(filter.toLowerCase()),
-    ) || [];
+  const list = adminRecords(data, tab, {
+    query: filter,
+    status: statusFilter,
+    subject: subjectFilter,
+  });
+  const pageCount = Math.max(1, Math.ceil(list.length / 20));
+  const currentPage = Math.min(page, pageCount);
+  const pageRecords = list.slice((currentPage - 1) * 20, currentPage * 20);
+  function duplicate(entity, item) {
+    const copy = {
+      ...item,
+      title: `${item.title} (نسخة)`.slice(0, 200),
+      status: "draft",
+    };
+    delete copy._id;
+    delete copy.upload;
+    edit(entity, copy);
+    setMessage(
+      "نسخة جديدة كمسودة. راجع الروابط؛ المرفق المباشر يحتاج رفعه من جديد.",
+    );
+  }
   function Controls({ entity, item }) {
     return (
       <div className="row-actions">
-        <button className="secondary small" onClick={() => edit(entity, item)}>
+        <button
+          className="secondary small"
+          disabled={entity === "subjects" && user.role === "editor"}
+          onClick={() => edit(entity, item)}
+        >
           تعديل
         </button>
-        {entity !== "admins" && (
+        {["resources", "news"].includes(entity) && (
           <button
-            className="danger small"
-            onClick={() =>
-              setConfirmation({
-                entity,
-                id: item._id,
-                title: item.title || item.name,
-              })
-            }
+            className="secondary small"
+            onClick={() => duplicate(entity, item)}
           >
-            أرشفة
+            نسخ كمسودة
           </button>
         )}
+        {entity !== "admins" &&
+          !(entity === "subjects" && user.role === "editor") && (
+            <button
+              className="danger small"
+              onClick={() =>
+                setConfirmation({
+                  entity,
+                  id: item._id,
+                  title: item.title || item.name,
+                })
+              }
+            >
+              أرشفة
+            </button>
+          )}
       </div>
     );
   }
@@ -348,7 +397,10 @@ export default function Admin() {
       </>
     );
   return (
-    <div className="admin-layout">
+    <div
+      className="admin-layout"
+      data-accent={data?.settings?.accent || "emerald"}
+    >
       <aside className="admin-sidebar">
         <Brand />
         <p className="sidebar-label">مساحة الإدارة</p>
@@ -363,6 +415,8 @@ export default function Admin() {
               onClick={() => {
                 setTab(id);
                 setFilter("");
+                setStatusFilter("");
+                setSubjectFilter("");
                 setError("");
                 setMessage("");
               }}
@@ -394,19 +448,29 @@ export default function Admin() {
             </p>
             <h1>{TABS.find((t) => t[0] === tab)?.[1]}</h1>
           </div>
-          {["resources", "subjects", "news", "admins"].includes(tab) &&
-            !(tab === "subjects" && user.role === "editor") && (
-              <button onClick={() => edit(tab)}>
-                <Icon name="plus" size={19} />{" "}
-                {tab === "resources"
-                  ? "إضافة محتوى"
-                  : tab === "subjects"
-                    ? "إضافة مادة"
-                    : tab === "news"
-                      ? "إعلان جديد"
-                      : "إضافة أدمن"}
-              </button>
-            )}
+          <div className="admin-top-actions">
+            <button
+              className="secondary small"
+              disabled={pending || loading}
+              onClick={boot}
+            >
+              <Icon name="refresh" size={17} />
+              تحديث
+            </button>
+            {["resources", "subjects", "news", "admins"].includes(tab) &&
+              !(tab === "subjects" && user.role === "editor") && (
+                <button onClick={() => edit(tab)}>
+                  <Icon name="plus" size={19} />{" "}
+                  {tab === "resources"
+                    ? "إضافة محتوى"
+                    : tab === "subjects"
+                      ? "إضافة مادة"
+                      : tab === "news"
+                        ? "إعلان جديد"
+                        : "إضافة أدمن"}
+                </button>
+              )}
+          </div>
         </header>
         <Notice error>{error}</Notice>
         <Notice>{message}</Notice>
@@ -504,21 +568,72 @@ export default function Admin() {
             )}
             {["resources", "subjects", "news", "admins"].includes(tab) && (
               <section className="panel">
-                <label className="search-box">
-                  <Icon name="search" />
-                  <input
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
-                    placeholder="ابحث في السجلات…"
-                    aria-label="بحث في السجلات"
-                  />
-                </label>
+                <div className="filter-bar admin-filters">
+                  <label className="search-box">
+                    <Icon name="search" />
+                    <input
+                      value={filter}
+                      onChange={(e) => setFilter(e.target.value)}
+                      placeholder="ابحث في السجلات…"
+                      aria-label="بحث في السجلات"
+                    />
+                  </label>
+                  <select
+                    aria-label="حالة السجل"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <option value="">كل الحالات</option>
+                    {["subjects", "admins"].includes(tab) ? (
+                      <>
+                        <option value="active">
+                          {tab === "subjects" ? "متاحة" : "نشط"}
+                        </option>
+                        <option value="inactive">
+                          {tab === "subjects" ? "مؤرشفة" : "معطل"}
+                        </option>
+                      </>
+                    ) : (
+                      Object.entries(STATUSES).map(([id, label]) => (
+                        <option key={id} value={id}>
+                          {label}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  {tab === "resources" && (
+                    <select
+                      aria-label="تصفية حسب المادة"
+                      value={subjectFilter}
+                      onChange={(e) => setSubjectFilter(e.target.value)}
+                    >
+                      <option value="">كل المواد</option>
+                      {data.subjects.map((s) => (
+                        <option key={s._id} value={s._id}>
+                          {s.name} · {s.academicYear}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {(filter || statusFilter || subjectFilter) && (
+                    <button
+                      className="text-button"
+                      onClick={() => {
+                        setFilter("");
+                        setStatusFilter("");
+                        setSubjectFilter("");
+                      }}
+                    >
+                      مسح الفلاتر
+                    </button>
+                  )}
+                </div>
                 <p className="result-count">
                   {list.length} سجل · تشمل المسودات والمؤرشف
                 </p>
                 {list.length ? (
                   <div className="admin-list">
-                    {list.map((item) => (
+                    {pageRecords.map((item) => (
                       <article className="list-row" key={item._id}>
                         <span className="file-icon">
                           <Icon
@@ -562,6 +677,27 @@ export default function Admin() {
                     أضف سجلًا جديدًا أو عدّل البحث.
                   </Empty>
                 )}
+                {pageCount > 1 && (
+                  <nav className="pagination" aria-label="صفحات السجلات">
+                    <button
+                      className="secondary small"
+                      disabled={currentPage === 1}
+                      onClick={() => setPage(currentPage - 1)}
+                    >
+                      السابق
+                    </button>
+                    <span>
+                      صفحة {currentPage} من {pageCount}
+                    </span>
+                    <button
+                      className="secondary small"
+                      disabled={currentPage === pageCount}
+                      onClick={() => setPage(currentPage + 1)}
+                    >
+                      التالي
+                    </button>
+                  </nav>
+                )}
               </section>
             )}
             {tab === "audit" && (
@@ -584,48 +720,18 @@ export default function Admin() {
               </section>
             )}
             {tab === "settings" && (
-              <section className="panel narrow">
-                <h2>هوية المنصة</h2>
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const f = new FormData(e.currentTarget);
-                    act(async () => {
-                      await api("admin/settings", {
-                        method: "PUT",
-                        body: JSON.stringify(Object.fromEntries(f)),
-                      });
-                      setData(await api("admin/overview"));
-                      setMessage("تم حفظ الإعدادات.");
-                    });
-                  }}
-                >
-                  <Field label="اسم المنصة">
-                    <input
-                      name="title"
-                      required
-                      maxLength={100}
-                      defaultValue={data.settings.title || "EIA Platform"}
-                    />
-                  </Field>
-                  <Field label="وصف المنصة">
-                    <textarea
-                      name="description"
-                      required
-                      maxLength={400}
-                      defaultValue={
-                        data.settings.description ||
-                        "مكتبتك الدراسية، في مكان واحد."
-                      }
-                    />
-                  </Field>
-                  <button disabled={pending}>حفظ الإعدادات</button>
-                </form>
-                <p className="muted">
-                  حد الرفع المباشر: ٢ ميجابايت لكل PDF. الوصول إلى الملفات
-                  الخارجية يعتمد على صلاحيات مشاركة صاحبها.
-                </p>
-              </section>
+              <Settings
+                settings={data.settings}
+                onSave={async (draft) => {
+                  await api("admin/settings", {
+                    method: "PUT",
+                    body: JSON.stringify(draft),
+                  });
+                  const next = await api("admin/overview");
+                  setData(next);
+                  return next.settings;
+                }}
+              />
             )}
           </>
         )}
@@ -638,6 +744,7 @@ export default function Admin() {
           }}
         >
           <Notice error>{error}</Notice>
+          <Notice>{message}</Notice>
           <form onSubmit={save}>
             <div className="form-grid">
               {editing.entity === "subjects" && (
