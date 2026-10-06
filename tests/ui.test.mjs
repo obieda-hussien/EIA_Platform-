@@ -7,7 +7,7 @@ import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { SITE_DEFAULTS, settingsInput } from "../lib/validation.mjs";
 
-let dom, createRoot, Admin, Portal, root, settings, user, securityState;
+let dom, createRoot, Admin, Portal, root, settings, user, securityState, studentSnapshot, studentPlan, campaignRecords;
 const errors = [];
 const subject = {
   _id: "a".repeat(24),
@@ -67,6 +67,28 @@ before(async () => {
   ({ Admin, Portal } = await import(bundlePath));
   ({ createRoot } = await import("react-dom/client"));
   globalThis.fetch = async (path, options = {}) => {
+    if (path === "/api/student/session") return Response.json(studentSnapshot);
+    if (path === "/api/student/register" && options.method === "POST") {
+      const b = JSON.parse(options.body);
+      if (!b.acceptPrivacy) return Response.json({error:"راجع الموافقة"},{status:400});
+      studentSnapshot = { user: {_id:"student-one",name:b.name,email:b.email,role:"student",emailVerified:false},state:null,emailVerificationAvailable:false };
+      return Response.json({user:studentSnapshot.user});
+    }
+    if (path === "/api/student/logout") { studentSnapshot = {user:null,state:null,emailVerificationAvailable:false}; return Response.json({ok:true}); }
+    if (path === "/api/student/planner") {
+      if (options.method === "PUT") { const b=JSON.parse(options.body);studentPlan={items:b.items,version:studentPlan.version+1}; }
+      return Response.json(studentPlan);
+    }
+    if (path === "/api/student/state") { const b=JSON.parse(options.body);studentSnapshot.state={profile:b.profile,saved:b.saved,completed:b.completed,version:b.version+1};return Response.json({version:b.version+1}); }
+    if (path === "/api/telemetry/consent") return Response.json({enabled:JSON.parse(options.body).enabled});
+    if (path === "/api/telemetry/pulse") return Response.json({enabled:true});
+    if (path === "/api/telemetry/event") return Response.json({ok:true});
+    if (path.startsWith("/api/admin/analytics")) return Response.json({from:"2026-10-01",today:{day:"2026-10-06",devices:0,sessions:0},daily:[],totals:{sessions:0,foregroundMs:0,activeMs:0},onlineDevices:0,avgOnlineMs:0,registered:0,ads:[],views:[],generatedAt:"2026-10-06T00:00:00Z"});
+    if (path === "/api/admin/campaigns") {
+      if(options.method==="POST")campaignRecords.push({...JSON.parse(options.body),_id:"f".repeat(24)});
+      return Response.json({campaigns:campaignRecords});
+    }
+    if (path === "/api/admin/students") return Response.json({students:[],sharedBrowsers:[]});
     if (path === "/api/auth/session") return Response.json({ user });
     if (path === "/api/auth/security") return Response.json(securityState);
     if (
@@ -130,6 +152,7 @@ before(async () => {
   };
 });
 beforeEach(() => {
+  studentSnapshot = {user:null,state:null,emailVerificationAvailable:false}; studentPlan = {items:[],version:0}; campaignRecords=[];
   settings = { ...SITE_DEFAULTS };
   securityState = {
     mfaEnabled: false,
@@ -184,6 +207,7 @@ async function click(node) {
   await act(async () => {
     node.click();
     await tick();
+    if (node.getAttribute("aria-label") === "إغلاق") await new Promise(resolve => setTimeout(resolve, 180));
   });
 }
 async function change(node, value) {
@@ -365,4 +389,45 @@ test("Control navigation opens, switches section and closes without losing dashb
   assert.match(document.querySelector("h1").textContent, /إعدادات المنصة/);
   const studentLink = document.querySelector('.admin-sidebar a[target="_blank"]');
   assert.equal(studentLink.href, "https://eia-platform-chi.vercel.app/");
+});
+
+
+test("Student signup opens a separate account without administration tools", async () => {
+  await mount(Portal);
+  await click(document.querySelector('[aria-label="تسجيل دخول الطالب"]'));
+  await click(button("إنشاء حساب"));
+  await change(field("اسمك"), "طالب اختبار");
+  await change(field("بريد المعهد"), "bis.2410423@eia.edu.eg");
+  await change(field("كلمة المرور"), "fixture-private-student-password");
+  await click(document.querySelector('.student-auth-form input[type="checkbox"]'));
+  const form = document.querySelector('.student-auth-form');
+  await act(async()=>{form.dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));await tick();});
+  assert.ok(document.querySelector('[aria-label="فتح حساب الطالب"]'));
+  assert.match(document.querySelector('.student-identity').textContent, /بريد غير موثّق/);
+  assert.equal(document.querySelector('a[href="/admin"]'),null);
+  assert.match(document.querySelector('.account-bottom').textContent, /بدون صلاحيات إدارة/);
+});
+test("Student planner saves a private task and completed status", async () => {
+  studentSnapshot = {user:{_id:"student-one",name:"طالب اختبار",email:"bis.2410423@eia.edu.eg",emailVerified:false},state:null,emailVerificationAvailable:false};
+  await mount(Portal);await click(document.querySelector('[aria-label="فتح حساب الطالب"]'));await click(button("خطة الدراسة"));
+  await change(field("مهمة الدراسة"), "مراجعة قواعد البيانات");
+  const form = document.querySelector('.planner-form');
+  await act(async()=>{form.dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));await tick();});
+  assert.equal(studentPlan.items.length,1);assert.equal(studentPlan.items[0].title,"مراجعة قواعد البيانات");
+  await click(document.querySelector('.planner-item input[type="checkbox"]'));
+  assert.equal(studentPlan.items[0].done,true);
+});
+test("Dashboard has real empty analytics and campaign drafting controls", async () => {
+  await mount(Admin);await click(button("إحصائيات النشاط"));
+  assert.match(document.querySelector('.insights-page').textContent,/لسه مفيش نشاط مقاس/);
+  assert.match(document.querySelector('.insights-page').textContent,/وقت التبويب الظاهر/);
+  await click(button("الإعلانات الممولة"));await click(button("حملة جديدة"));
+  await change(field("عنوان الحملة"),"مصدر دراسي");await change(field("رابط الإعلان"),"https://eia.edu.eg/");
+  const form = document.querySelector('[role="dialog"] form');
+  await act(async()=>{form.dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));await tick();});
+  assert.equal(campaignRecords.length,1);assert.equal(campaignRecords[0].status,"draft");
+});
+test("Editors never see activity, campaign or student-directory navigation", async () => {
+  user={...user,role:"editor"};await mount(Admin);
+  for(const label of ["إحصائيات النشاط","الإعلانات الممولة","حسابات الطلبة"])assert.equal([...document.querySelectorAll('.admin-sidebar button')].some(b=>b.textContent.trim()===label),false);
 });

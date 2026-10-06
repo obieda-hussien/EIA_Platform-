@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import {
   api,
   Brand,
@@ -13,6 +13,8 @@ import {
 } from "./shared";
 import { DEPARTMENTS, normalize } from "../lib/validation.mjs";
 import { resourceShareUrl, sortResources } from "../lib/catalog.mjs";
+import { useTelemetry, PrivacyPanel, AdSlot } from "./Telemetry";
+const StudentAccount = lazy(() => import("./StudentAccount"));
 const YEARS = ["الأولى", "الثانية", "الثالثة", "الرابعة"];
 const SOURCES = [
   {
@@ -76,6 +78,51 @@ export default function Portal() {
     [progressFilter, setProgressFilter] = useState(""),
     [message, setMessage] = useState(""),
     [shareUrl, setShareUrl] = useState("");
+  const [student, setStudent] = useState(null), [accountOpen, setAccountOpen] = useState(false), [cloudStatus, setCloudStatus] = useState("saved"), [emailVerificationAvailable, setEmailVerificationAvailable] = useState(false);
+  const cloudVersion = useRef(0), cloudSerialized = useRef(null), cloudPaused = useRef(false), cloudBusy = useRef(false), switchingAccount = useRef(false), studentId = useRef(null);
+  studentId.current = student?._id;
+  const metrics = useTelemetry(tab);
+  function applyAccount(snapshot) {
+    cloudPaused.current = false;
+    setStudent(snapshot.user);
+    setEmailVerificationAvailable(Boolean(snapshot.emailVerificationAvailable));
+    cloudVersion.current = snapshot.state?.version || 0;
+    if (snapshot.user) {
+      const value = snapshot.state || { profile, saved: [], completed: [] };
+      cloudSerialized.current = JSON.stringify({ profile: value.profile, saved: value.saved || [], completed: value.completed || [] });
+      setProfile(value.profile); setSaved(value.saved || []); setCompleted(value.completed || []);
+    } else {
+      cloudSerialized.current = null;
+      try {
+        const guestProfile = JSON.parse(localStorage.getItem("eia_profile"));
+        if (guestProfile && DEPARTMENTS.some(d=>d.id===guestProfile.department) && ["1","2","3","4"].includes(guestProfile.year) && ["1","2"].includes(guestProfile.term)) setProfile(guestProfile);
+        const guestSaved = JSON.parse(localStorage.getItem("eia_saved")), guestCompleted = JSON.parse(localStorage.getItem("eia_completed"));
+        setSaved(Array.isArray(guestSaved) ? guestSaved.filter(x=>typeof x==='string') : []);
+        setCompleted(Array.isArray(guestCompleted) ? guestCompleted.filter(x=>typeof x==='string') : []);
+      } catch { setSaved([]); setCompleted([]); }
+    }
+    setCloudStatus("saved");
+  }
+  useEffect(() => { api("student/session").then(applyAccount).catch(()=>{}); }, []);
+  useEffect(() => {
+    if (!student || !ready || cloudPaused.current || switchingAccount.current) return;
+    const value = JSON.stringify({profile, saved, completed}), id = student._id;
+    if (value === cloudSerialized.current) return;
+    let stopped = false, timer;
+    setCloudStatus("pending");
+    const flush = async () => {
+      if (stopped || studentId.current !== id || switchingAccount.current || cloudPaused.current) return;
+      if (cloudBusy.current) { timer = setTimeout(flush, 300); return; }
+      cloudBusy.current = true;
+      try {
+        const result = await api("student/state", {method:"PUT", body:JSON.stringify({...JSON.parse(value),version:cloudVersion.current})});
+        if (studentId.current === id) { cloudVersion.current = result.version; cloudSerialized.current = value; if (!stopped) setCloudStatus("saved"); }
+      } catch (e) { if(studentId.current === id) { cloudPaused.current = true; setCloudStatus("error"); setMessage(e.status===409?e.message:"تعذّرت المزامنة. افتح حسابك وأعد تحميل بياناته."); } }
+      finally { cloudBusy.current = false; }
+    };
+    timer = setTimeout(flush, 800);
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [profile, saved, completed, student?._id, ready]);
   async function load() {
     setLoading(true);
     setError("");
@@ -118,7 +165,7 @@ export default function Portal() {
     setReady(true);
   }, []);
   useEffect(() => {
-    if (ready) {
+    if (ready && !student && !switchingAccount.current) {
       try {
         localStorage.setItem("eia_profile", JSON.stringify(profile));
         localStorage.setItem("eia_saved", JSON.stringify(saved));
@@ -127,7 +174,7 @@ export default function Portal() {
         /* Keep navigation usable when browser storage is unavailable. */
       }
     }
-  }, [profile, saved, completed, ready]);
+  }, [profile, saved, completed, ready, student?._id]);
   useEffect(() => {
     if (loading || error) return;
     function restoreResource() {
@@ -159,6 +206,7 @@ export default function Portal() {
     window.history.replaceState(null, "", url);
   }
   function openResource(resource) {
+    metrics.track("resource_open", resource._id);
     setView(resource);
     setShareUrl("");
     setMessage("");
@@ -347,6 +395,7 @@ export default function Portal() {
             ))}
           </nav>
           <div className="header-actions">
+            <button className="student-account-button" aria-label={student ? "فتح حساب الطالب" : "تسجيل دخول الطالب"} onClick={() => setAccountOpen(true)}><Icon name="user" size={19}/><span>{student ? student.name.split(" ")[0] : "تسجيل الدخول"}</span>{student && <span className={`sync-dot ${cloudStatus}`} aria-label={cloudStatus === "saved" ? "متزامن" : cloudStatus === "error" ? "تعذرت المزامنة" : "جاري المزامنة"}/>}</button>
             <button
               className="profile-pill"
               onClick={() => setProfileOpen(true)}
@@ -360,7 +409,7 @@ export default function Portal() {
           </div>
         </div>
       </header>
-      <main className="container">
+      <main className="container page-motion" key={tab}>
         {catalog.settings?.bannerText && (
           <div className="platform-banner">
             <Icon name="news" size={20} />
@@ -435,6 +484,7 @@ export default function Portal() {
             <div className="student-shortcuts" aria-label="اختصارات الدراسة">
               {[["subjects", "book", "موادي", "مرتبة حسب مسارك"], ["saved", "save", "محفوظاتي", "ارجع للمهم بسهولة"], ["sources", "link", "خدمات المعهد", "النتائج والروابط الأصلية"]].map(([id, icon, title, description]) => <button key={id} className="student-shortcut" onClick={() => navigate(id)}><span className="shortcut-icon"><Icon name={icon} /></span><span><strong>{title}</strong><small>{description}</small></span><Icon name="arrow" size={17} /></button>)}
             </div>
+            <AdSlot campaigns={catalog.campaigns} slot="home" track={metrics.track} enabled={metrics.enabled}/>
             <div className="section-heading">
               <div>
                 <p className="eyebrow">ابدأ من آخر إضافة</p>
@@ -504,7 +554,7 @@ export default function Portal() {
               <h1>{tab === "saved" ? "محفوظاتك" : "المكتبة الدراسية"}</h1>
               <p>
                 {tab === "saved"
-                  ? "المحتوى اللي اخترت ترجع له. الحفظ على هذا الجهاز."
+                  ? student ? "المحتوى اللي اخترت ترجع له. متزامن مع حسابك." : "المحتوى اللي اخترت ترجع له. الحفظ على هذا الجهاز."
                   : "محاضرات وملخصات وتدريبات، مرتبة حسب موادك."}
               </p>
             </section>
@@ -757,29 +807,15 @@ export default function Portal() {
           </>
         )}
       </main>
-      <footer className="site-footer container">
-        <Brand title={catalog.settings?.title} />
-        <p>
-          منصة طلابية مستقلة، غير تابعة رسميًا للمعهد. حقوق المحتوى لأصحابه.
-        </p>
-        <div>
-          <button className="text-button" onClick={() => navigate("saved")}>
-            المحفوظات
-          </button>
-          <button className="text-button" onClick={() => navigate("sources")}>
-            المصادر والخدمات
-          </button>
-          {catalog.settings?.communityUrl && (
-            <a
-              href={catalog.settings.communityUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              قناة الطلبة ↗
-            </a>
-          )}
+      <footer className="student-footer">
+        <div className="container">
+          <AdSlot campaigns={catalog.campaigns} slot="footer" track={metrics.track} enabled={metrics.enabled}/>
+          <div className="footer-top"><div className="footer-identity"><Brand title={catalog.settings?.title}/><h2>دراستك أوضح. وقتك ليك.</h2><p>مساحة طلابية مستقلة تنظّم المواد والمحاضرات، وتخلّي الرجوع للمهم أسهل.</p></div><nav aria-label="روابط المنصة في الفوتر"><h3>مساحتك الدراسية</h3>{[["library","book","المكتبة"],["saved","save","المحفوظات"],["news","news","الإعلانات"]].map(([id,icon,label])=><button key={id} className="text-button" onClick={()=>navigate(id)}><Icon name={icon} size={17}/>{label}</button>)}<button className="text-button" onClick={()=>setAccountOpen(true)}><Icon name="calendar" size={17}/>حسابي وخطة الدراسة</button></nav><nav aria-label="المصادر الرسمية في الفوتر"><h3>خدمات المعهد</h3>{SOURCES.slice(0,3).map(source=><a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer">{source.title}<Icon name="external" size={15}/></a>)}<button className="text-button" onClick={()=>navigate("sources")}>كل المصادر<Icon name="arrow" size={16}/></button>{catalog.settings?.communityUrl&&<a href={catalog.settings.communityUrl} target="_blank" rel="noopener noreferrer">قناة الطلبة<Icon name="external" size={15}/></a>}</nav></div>
+          <PrivacyPanel metrics={metrics}/>
+          <div className="footer-bottom"><p>© {new Date().getFullYear()} EIA Platform · منصة مستقلة، غير تابعة رسميًا للمعهد. حقوق المحتوى لأصحابه.</p><span><Icon name="shield" size={16}/>حسابات الطلبة منفصلة عن الإدارة</span></div>
         </div>
       </footer>
+      {accountOpen && <Suspense fallback={<div role="status" className="notice">جاري فتح حسابك…</div>}><StudentAccount user={student} emailVerificationAvailable={emailVerificationAvailable} cloudStatus={cloudStatus} onClose={()=>setAccountOpen(false)} onChanged={applyAccount} onAuthBusy={busy=>{switchingAccount.current=busy;}}/></Suspense>}
       <nav className="mobile-nav" aria-label="التنقل على الموبايل">
         {[
           ["home", "grid", "الرئيسية"],

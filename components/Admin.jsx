@@ -17,15 +17,19 @@ import { DEPARTMENTS, UPLOAD_LIMIT } from "../lib/validation.mjs";
 import { adminRecords } from "../lib/catalog.mjs";
 import Settings from "./Settings";
 import AccountSecurity from "./AccountSecurity";
+import { AnalyticsDashboard, CampaignManager, StudentDirectory } from "./AdminInsights";
 const TABS = [
   ["overview", "نظرة عامة", "grid"],
+  ["analytics", "إحصائيات النشاط", "chart"],
+  ["campaigns", "الإعلانات الممولة", "megaphone"],
+  ["students", "حسابات الطلبة", "graduate"],
   ["resources", "المحتوى والملفات", "file"],
   ["subjects", "المواد الدراسية", "book"],
   ["news", "الإعلانات", "news"],
   ["admins", "حسابات الأدمنز", "user"],
   ["audit", "سجل النشاط", "check"],
-  ["settings", "إعدادات المنصة", "grid"],
-  ["security", "أمان الحساب", "check"],
+  ["settings", "إعدادات المنصة", "settings"],
+  ["security", "أمان الحساب", "shield"],
 ];
 const DEFAULTS = {
   subjects: {
@@ -282,8 +286,7 @@ export default function Admin({ initialUser = null, publicUrl = "https://eia-pla
         <nav>
           {TABS.filter(
             ([id]) =>
-              !["admins", "settings", "audit"].includes(id) ||
-              user.role === "owner",
+              (!["admins", "settings", "audit", "students"].includes(id) || user.role === "owner") && (!["analytics", "campaigns"].includes(id) || user.role !== "editor"),
           ).map(([id, label, icon]) => (
             <button
               key={id}
@@ -353,10 +356,14 @@ export default function Admin({ initialUser = null, publicUrl = "https://eia-pla
         </header>
         <Notice error>{error}</Notice>
         <Notice>{message}</Notice>
+        <div className="admin-content-motion" key={tab}>
         {!data ? (
           <Empty title="جاري تحميل البيانات" />
         ) : (
           <>
+            {tab === "analytics" && <div className="page-motion" key="analytics"><AnalyticsDashboard/></div>}
+            {tab === "campaigns" && <div className="page-motion" key="campaigns"><CampaignManager/></div>}
+            {tab === "students" && user.role === "owner" && <div className="page-motion" key="students"><StudentDirectory/></div>}
             {tab === "overview" && (
               <>
                 <div className="stats-grid">
@@ -623,6 +630,7 @@ export default function Admin({ initialUser = null, publicUrl = "https://eia-pla
             )}
           </>
         )}
+        </div>
       </main>
       {editing && (
         <Modal

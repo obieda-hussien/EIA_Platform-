@@ -194,3 +194,21 @@ test("Student HTML contains no administration links", async () => {
   const html = await (await request(origin)).text();
   assert.doesNotMatch(html, /href="\/(?:admin|login)"|eia-control-obieda/);
 });
+
+
+test("Student session and telemetry status expose no identity to an anonymous browser", async () => {
+ const response=await request(`${origin}/api/student/session`);assert.equal(response.status,200);assert.deepEqual(await response.json(),{user:null,state:null,emailVerificationAvailable:false});assert.match(response.headers.get('cache-control'),/no-store/);
+ const status=await request(`${origin}/api/telemetry/status`);assert.deepEqual(await status.json(),{enabled:false});
+ for(const path of ['student/planner','admin/analytics','admin/campaigns','admin/students'])assert.equal((await request(`${origin}/api/${path}`)).status,401);
+});
+test("Control origin cannot use student accounts or tracking routes", async () => {
+ for(const path of ['student/session','student/planner','telemetry/status'])assert.equal((await transport(`${origin}/api/${path}`,{headers:{host:controlHost}})).status,404);
+ for(const path of ['student/register','telemetry/consent'])assert.equal((await transport(`${origin}/api/${path}`,{method:'POST',headers:{host:controlHost,origin:controlOrigin,'content-type':'application/json'},body:'{}'})).status,404);
+});
+test("New routes reject query injection, extra records and cross-origin writes before the database", async () => {
+ for(const path of ['student/session?studentId=other','student/planner/extra','telemetry/status?deviceId=other','admin/analytics?days=365','admin/analytics?days=7&days=30'])assert.ok([400,404].includes((await request(`${origin}/api/${path}`)).status));
+ for(const path of ['student/register','student/state','telemetry/consent','telemetry/pulse'])assert.equal((await request(`${origin}/api/${path}`,{method:path==='student/state'?'PUT':'POST',headers:{origin:'https://evil.test','content-type':'application/json'},body:'{}'})).status,403);
+});
+test("Student logout expires its distinct secure cookie without touching administration", async () => {
+ const response=await request(`${origin}/api/student/logout`,{method:'POST',headers:{origin,'content-type':'application/json'},body:'{}'});assert.equal(response.status,200);const cookies=response.headers.getSetCookie();const cookie=cookies.find(x=>x.startsWith('__Host-eia_student='));assert.ok(cookie);assert.match(cookie,/Secure/i);assert.match(cookie,/HttpOnly/i);assert.match(cookie,/SameSite=strict/i);assert.match(cookie,/Max-Age=0/i);assert.ok(!cookies.some(x=>x.startsWith('__Host-eia_session=')));
+});

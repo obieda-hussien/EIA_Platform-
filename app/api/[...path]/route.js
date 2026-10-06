@@ -1,6 +1,9 @@
 import { ObjectId, Binary } from "mongodb";
 import { db } from "../../../lib/db.mjs";
 import { readLimited } from "../../../lib/http.mjs";
+import { studentAction } from "../../../lib/student.mjs";
+import { telemetryAction, analyticsSnapshot } from "../../../lib/activity.mjs";
+import { campaignInput } from "../../../lib/campaigns.mjs";
 import { surfaceAllows } from "../../../lib/surface.mjs";
 import {
   validateRoute,
@@ -119,6 +122,14 @@ async function dispatch(req, context) {
   const source = clientKey(req);
   // Bounded local limits shed repeat traffic before MongoDB and scrypt work.
   earlyLimit(`api:${source}`, 240);
+  if (area === "student") {
+    if (method !== "GET") earlyLimit(`student:${source}`, 60);
+    return json(await studentAction(req, entity, body, source));
+  }
+  if (area === "telemetry") {
+    earlyLimit(`telemetry:${source}`, 120);
+    return json(await telemetryAction(req, entity, body, source));
+  }
   if (area === "auth" && method !== "GET") earlyLimit(`auth:${source}`, 30);
   if (area === "public" && entity === "file") earlyLimit(`file:${source}`, 30);
   if (area === "auth") {
@@ -218,7 +229,7 @@ async function dispatch(req, context) {
     if (entity === "catalog") {
       const snapshot = await catalogCache.get(async () => {
         const d = await db();
-        const [subjects, resources, news, settings] = await Promise.all([
+        const [subjects, resources, news, settings, campaigns] = await Promise.all([
           d
             .collection("subjects")
             .find(
@@ -255,6 +266,7 @@ async function dispatch(req, context) {
               { _id: "site" },
               { projection: publicProjection("settings"), maxTimeMS: 3000 },
             ),
+          d.collection("campaigns").find({ status: "published", startsAt: { $lte: new Date() }, $or: [{ endsAt: null }, { endsAt: { $gt: new Date() } }] }, { projection: publicProjection("campaigns"), maxTimeMS: 3000 }).sort({ createdAt: -1 }).limit(80).toArray(),
         ]);
         const subjectIds = new Set(subjects.map((s) => s._id.toString()));
         return {
@@ -264,6 +276,7 @@ async function dispatch(req, context) {
             .filter((r) => subjectIds.has(r.subjectId.toString()))
             .map((r) => publicDocument("resources", r)),
           news: news.map((n) => publicDocument("news", n)),
+          campaigns: campaigns.filter((c, i, all) => all.findIndex(item => item.slot === c.slot) === i).map((c) => publicDocument("campaigns", c)),
           settings: {
             ...SITE_DEFAULTS,
             ...publicDocument("settings", settings),
@@ -305,6 +318,33 @@ async function dispatch(req, context) {
     earlyLimit(`admin:${user._id}`, 120);
     if (method !== "GET") await throttle(`writes:${user._id}`, 60, 60000);
     const d = await db();
+    if (["analytics", "campaigns"].includes(entity) && user.role === "editor") throw new AppError("متاحة للمالك والأدمن فقط.", 403);
+    if (entity === "analytics") return json(await analyticsSnapshot(url.searchParams.get("days") === "7" ? 7 : 30));
+    if (entity === "students") {
+      owner(user);
+      const [students, devices] = await Promise.all([
+        d.collection("students").find({}, { projection: { name: 1, email: 1, emailVerified: 1, active: 1, createdAt: 1 }, maxTimeMS: 3000 }).sort({ createdAt: -1 }).limit(200).toArray(),
+        d.collection("student_device_links").aggregate([{ $match: { expiresAt: { $gt: new Date() } } }, { $group: { _id: "$deviceId", studentIds: { $addToSet: "$studentId" }, lastSeenAt: { $max: "$lastSeenAt" } } }, { $match: { "studentIds.1": { $exists: true } } }, { $sort: { lastSeenAt: -1 } }, { $limit: 50 }], { maxTimeMS: 3000 }).toArray(),
+      ]);
+      return json({ students, sharedBrowsers: devices.map((item, i) => ({ label: `متصفح مشترك ${i + 1}`, studentIds: item.studentIds.map(String).slice(0, 20), lastSeenAt: item.lastSeenAt })) });
+    }
+    if (entity === "campaigns") {
+      if (method === "GET") return json({ campaigns: await d.collection("campaigns").find({}, { projection: { updatedBy: 0 }, maxTimeMS: 3000 }).sort({ createdAt: -1 }).limit(100).toArray() });
+      if (method === "DELETE") {
+        const r = await d.collection("campaigns").updateOne({ _id: id(record) }, { $set: { status: "archived", updatedAt: new Date() } });
+        if (!r.matchedCount) throw new AppError("الإعلان غير موجود.", 404);
+      } else {
+        const data = campaignInput(await body(req));
+        if (method === "POST") {
+          if (await d.collection("campaigns").countDocuments({ status: { $ne: "archived" } }) >= 80) throw new AppError("أرشف الحملات القديمة قبل إضافة حملة جديدة.");
+          await d.collection("campaigns").insertOne({ ...data, createdAt: new Date(), updatedAt: new Date() });
+        } else {
+          const r = await d.collection("campaigns").updateOne({ _id: id(record) }, { $set: { ...data, updatedAt: new Date() } });
+          if (!r.matchedCount) throw new AppError("الإعلان غير موجود.", 404);
+        }
+      }
+      await audit(user, "update", "campaigns", record || "new"); catalogCache.clear(); return json({ ok: true });
+    }
     if (entity === "overview" && method === "GET") {
       const [subjects, resources, news, admins, audits, storage] =
         await Promise.all([
