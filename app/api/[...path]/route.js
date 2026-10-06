@@ -1,3 +1,4 @@
+import {adMedia,adRequests,validateCreativeOwnership,retainCampaignMedia} from "../../../lib/advertising.mjs";
 import {pushAction,notificationAction} from "../../../lib/push.mjs";
 import { ObjectId, Binary } from "mongodb";
 import { db } from "../../../lib/db.mjs";
@@ -124,6 +125,8 @@ async function dispatch(req, context) {
   // Bounded local limits shed repeat traffic before MongoDB and scrypt work.
   earlyLimit(`api:${source}`, 240);
   if (area === "push") return json(await pushAction(req,entity,body,source));
+  if (["student","public","admin"].includes(area)&&entity==="ad-media") return await adMedia(req,area,record,source);
+  if (["student","admin"].includes(area)&&entity==="ad-requests") return json(await adRequests(req,area,record,body,source));
   if (area === "student") {
     if (method !== "GET") earlyLimit(`student:${source}`, 60);
     return json(await studentAction(req, entity, body, source));
@@ -278,7 +281,7 @@ async function dispatch(req, context) {
             .filter((r) => subjectIds.has(r.subjectId.toString()))
             .map((r) => publicDocument("resources", r)),
           news: news.map((n) => publicDocument("news", n)),
-          campaigns: campaigns.filter((c, i, all) => all.findIndex(item => item.slot === c.slot) === i).map((c) => publicDocument("campaigns", c)),
+          campaigns: campaigns.map((c) => publicDocument("campaigns", c)),
           settings: {
             ...SITE_DEFAULTS,
             ...publicDocument("settings", settings),
@@ -338,6 +341,8 @@ async function dispatch(req, context) {
         if (!r.matchedCount) throw new AppError("الإعلان غير موجود.", 404);
       } else {
         const data = campaignInput(await body(req));
+        await validateCreativeOwnership(data,user._id,true);
+        await retainCampaignMedia(data);
         if (method === "POST") {
           if (await d.collection("campaigns").countDocuments({ status: { $ne: "archived" } }) >= 80) throw new AppError("أرشف الحملات القديمة قبل إضافة حملة جديدة.");
           await d.collection("campaigns").insertOne({ ...data, createdAt: new Date(), updatedAt: new Date() });

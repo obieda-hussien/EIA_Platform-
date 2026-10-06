@@ -7,7 +7,7 @@ import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { SITE_DEFAULTS, settingsInput } from "../lib/validation.mjs";
 
-let dom, createRoot, Admin, Portal, root, settings, user, securityState, studentSnapshot, studentPlan, campaignRecords;
+let dom, createRoot, Admin, Portal, root, settings, user, securityState, studentSnapshot, studentPlan, campaignRecords, requestRecords;
 const errors = [];
 const subject = {
   _id: "a".repeat(24),
@@ -68,6 +68,10 @@ before(async () => {
   ({ Admin, Portal } = await import(bundlePath));
   ({ createRoot } = await import("react-dom/client"));
   globalThis.fetch = async (path, options = {}) => {
+    if(path==="/api/student/profile"){const b=JSON.parse(options.body);studentSnapshot.user={...studentSnapshot.user,name:b.name,personal:{phone:b.phone,studentCode:b.studentCode,city:b.city,bio:b.bio},profileVersion:(studentSnapshot.user.profileVersion||0)+1};return Response.json({ok:true});}
+    if(path==="/api/student/ad-requests"){if(options.method==="POST")requestRecords.push({...JSON.parse(options.body),_id:"e".repeat(24),status:"pending",version:1,applicantName:studentSnapshot.user.name,applicantEmail:studentSnapshot.user.email});return Response.json({requests:requestRecords});}
+    if(path==="/api/admin/ad-requests")return Response.json({requests:requestRecords});
+    if(path.startsWith("/api/admin/ad-requests/")){requestRecords[0].status="approved";campaignRecords.push({...requestRecords[0],status:"draft"});return Response.json({ok:true});}
     if (path === "/api/student/session") return Response.json(studentSnapshot);
     if (path === "/api/student/register" && options.method === "POST") {
       const b = JSON.parse(options.body);
@@ -154,7 +158,7 @@ before(async () => {
   };
 });
 beforeEach(() => {
-  studentSnapshot = {user:null,state:null,emailVerificationAvailable:false}; studentPlan = {items:[],version:0}; campaignRecords=[];
+  studentSnapshot = {user:null,state:null,emailVerificationAvailable:false}; studentPlan = {items:[],version:0}; campaignRecords=[];requestRecords=[];
   settings = { ...SITE_DEFAULTS };
   securityState = {
     mfaEnabled: false,
@@ -444,4 +448,17 @@ test("Student homepage and account modal pass automated accessibility structure 
 
 test("Admins can select a general announcement and inspect its push delivery result",async()=>{
  await mount(Admin);await click(button('إشعارات الطلبة'));const select=document.querySelector('select');await change(select,'a'.repeat(24));await click(button('إرسال تنبيه الإعلان للمشتركين'));assert.match(document.body.textContent,/مقبول للإرسال: 1/);
+});
+
+test('Profile editing saves private details and settings expose explicit consent without preselecting it',async()=>{
+ studentSnapshot={user:{_id:'student-one',name:'طالب اختبار',email:'bis.2410423@eia.edu.eg',emailVerified:false,analyticsConsent:null},state:null,emailVerificationAvailable:false};
+ await mount(Portal);await click(document.querySelector('[aria-label="فتح حساب الطالب"]'));await change(field('رقم الهاتف (اختياري)'),'+201012345678');await change(field('كود الطالب (اختياري)'),'2410423');
+ await act(async()=>{document.querySelector('.personal-profile-form').dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));await tick();});assert.equal(studentSnapshot.user.personal.phone,'+201012345678');
+ await click(button('الإعدادات'));assert.match(document.querySelector('[role="dialog"]').textContent,/إشعارات هذا الجهاز/);assert.match(document.querySelector('[role="dialog"]').textContent,/السماح بالقياس/);
+});
+test('Advertiser submission records review consent and admin approval prepares a draft',async()=>{
+ requestRecords=[];studentSnapshot={user:{_id:'student-one',name:'طالب اختبار',email:'bis.2410423@eia.edu.eg',emailVerified:false},state:null,emailVerificationAvailable:false};await mount(Portal);await click(document.querySelector('.advertise-entry'));
+ await change(field('اسم المشروع أو النشاط'),'مشروع دراسي');await change(field('وسيلة التواصل للمراجعة'),'contact@example.test');await change(field('عنوان الإعلان'),'إعلان اختبار');await change(field('رابط الوجهة'),'https://eia.edu.eg/');await click(document.querySelector('[role="dialog"] input[type="checkbox"]'));
+ await act(async()=>{document.querySelector('[role="dialog"] form').dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));await tick();});assert.equal(requestRecords.length,1);assert.equal(requestRecords[0].acceptReview,true);assert.equal(requestRecords[0].status,'pending');
+ await mount(Admin);await click(button('طلبات المعلنين'));await click(button('عرض الطلب'));await click(button('قبول وتجهيز مسودة'));assert.equal(campaignRecords[0].status,'draft');
 });

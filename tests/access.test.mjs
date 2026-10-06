@@ -231,3 +231,11 @@ test("Push reads reveal only capability, notifications stay private and cross-or
  assert.equal((await request(`${origin}/api/push/subscribe`,{method:'POST',headers:{origin:'https://evil.test','content-type':'application/json'},body:'{}'})).status,403);
  assert.equal((await request(`${origin}/api/push/config`,{headers:{host:controlHost}})).status,404);
 });
+
+test('Advertiser requests, image uploads and profiles require their own session and stay off the other host',async()=>{
+ for(const path of ['student/ad-requests','student/ad-media/'+ 'a'.repeat(24),'admin/ad-requests','admin/ad-media/'+ 'a'.repeat(24)])assert.equal((await request(`${origin}/api/${path}`)).status,401);
+ for(const [path,method] of [['student/profile','PUT'],['student/ad-requests','POST'],['student/ad-media','POST']])assert.equal((await request(`${origin}/api/${path}`,{method,headers:{origin,'content-type':'application/json'},body:'{}'})).status,401);
+ assert.equal((await request(`${origin}/api/student/ad-requests`,{headers:{host:controlHost}})).status,404);
+ assert.equal((await transport(`${origin}/api/admin/ad-requests`,{headers:{host:'student.test'}})).status,404);
+ assert.equal((await request(`${origin}/api/student/ad-requests`,{method:'POST',headers:{origin:'https://evil.test','content-type':'application/json'},body:'{}'})).status,403);
+});

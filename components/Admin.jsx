@@ -1,4 +1,5 @@
 "use client";
+import {AdReviewQueue} from "./AdRequests";
 import NotificationManager from "./NotificationManager";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -23,6 +24,7 @@ const TABS = [
   ["overview", "نظرة عامة", "grid"],
   ["analytics", "إحصائيات النشاط", "chart"],
   ["campaigns", "الإعلانات الممولة", "megaphone"],
+  ["ad-requests", "طلبات المعلنين", "megaphone"],
   ["notifications", "إشعارات الطلبة", "bell"],
   ["students", "حسابات الطلبة", "graduate"],
   ["resources", "المحتوى والملفات", "file"],
@@ -288,7 +290,7 @@ export default function Admin({ initialUser = null, publicUrl = "https://eia-pla
         <nav>
           {TABS.filter(
             ([id]) =>
-              (!["admins", "settings", "audit", "students"].includes(id) || user.role === "owner") && (!["analytics", "campaigns", "notifications"].includes(id) || user.role !== "editor"),
+              (!["admins", "settings", "audit", "students"].includes(id) || user.role === "owner") && (!["analytics", "campaigns", "notifications", "ad-requests"].includes(id) || user.role !== "editor"),
           ).map(([id, label, icon]) => (
             <button
               key={id}
@@ -364,6 +366,7 @@ export default function Admin({ initialUser = null, publicUrl = "https://eia-pla
         ) : (
           <>
             {tab === "analytics" && <div className="page-motion" key="analytics"><AnalyticsDashboard/></div>}
+            {tab === "ad-requests" && <AdReviewQueue/>}
             {tab === "notifications" && <NotificationManager/>}
             {tab === "campaigns" && <div className="page-motion" key="campaigns"><CampaignManager/></div>}
             {tab === "students" && user.role === "owner" && <div className="page-motion" key="students"><StudentDirectory/></div>}

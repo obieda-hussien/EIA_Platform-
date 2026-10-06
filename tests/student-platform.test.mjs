@@ -13,7 +13,7 @@ import {campaignInput} from '../lib/campaigns.mjs';
 let route,documents,jar,hash;
 const outfile=fileURLToPath(new URL(`../node_modules/.cache/eia-students-${process.pid}.mjs`,import.meta.url));
 const get=(doc,key)=>key.split('.').reduce((v,k)=>v?.[k],doc),equal=(a,b)=>String(a)===String(b);
-function matches(doc,filter){return Object.entries(filter).every(([k,v])=>{if(k==='$or')return v.some(f=>matches(doc,f));const value=get(doc,k);if(v&&typeof v==='object'&&!(v instanceof Date)&&!(v instanceof ObjectId))return Object.entries(v).every(([op,w])=>op==='$gt'?value>w:op==='$gte'?value>=w:op==='$lte'?value<=w:op==='$ne'?!equal(value,w):op==='$exists'?(value!==undefined)===w:op==='$in'?w.some(x=>equal(value,x)):false);return equal(value,v);});}
+function matches(doc,filter){return Object.entries(filter).every(([k,v])=>{if(k==='$or')return v.some(f=>matches(doc,f));if(k==='$and')return v.every(f=>matches(doc,f));const value=get(doc,k);if(v&&typeof v==='object'&&!(v instanceof Date)&&!(v instanceof ObjectId))return Object.entries(v).every(([op,w])=>op==='$gt'?value>w:op==='$gte'?value>=w:op==='$lte'?value<=w:op==='$ne'?!equal(value,w):op==='$exists'?(value!==undefined)===w:op==='$in'?w.some(x=>equal(value,x)):false);return equal(value,v);});}
 function projection(doc,p){if(!doc)return null;if(!p)return {...doc};if(Object.values(p).includes(1))return Object.fromEntries(Object.entries(doc).filter(([k])=>k==='_id'||p[k]===1));return Object.fromEntries(Object.entries(doc).filter(([k])=>p[k]!==0));}
 function database(){return{collection(name){const records=()=>documents[name]||[];const apply=(doc,u,newDoc=false)=>{if(newDoc)Object.assign(doc,u.$setOnInsert);Object.assign(doc,u.$set);for(const[k,n]of Object.entries(u.$inc||{}))doc[k]=(doc[k]||0)+n;for(const[k,n]of Object.entries(u.$max||{}))if(!doc[k]||doc[k]<n)doc[k]=n;for(const k of Object.keys(u.$unset||{}))delete doc[k];for(const[k,value]of Object.entries(u.$addToSet||{})){doc[k]||=[];if(!doc[k].some(v=>equal(v,value)))doc[k].push(value);}};return{
  async findOne(filter,options={}){return projection(records().find(d=>matches(d,filter)),options.projection);},
@@ -32,7 +32,7 @@ before(async()=>{
  process.env.ADMIN_HOST='control.test';delete process.env.RESEND_API_KEY;delete process.env.EMAIL_FROM;
  hash=await hashPassword('fixture-private-student-password');
  await mkdir(fileURLToPath(new URL('../node_modules/.cache',import.meta.url)),{recursive:true});
- const result=await build({entryPoints:[fileURLToPath(new URL('../app/api/[...path]/route.js',import.meta.url))],bundle:true,write:false,platform:'node',format:'esm',external:['mongodb','web-push'],plugins:[{name:'student-boundaries',setup(b){b.onResolve({filter:/db\.mjs$/},()=>({path:'db',namespace:'test'}));b.onResolve({filter:/^web-push$/},()=>({path:'webpush',namespace:'push-test'}));b.onLoad({filter:/.*/,namespace:'push-test'},()=>({contents:'export default {setVapidDetails(){},async sendNotification(...args){return globalThis.__pushSend(...args)}}'}));b.onResolve({filter:/^next\/headers$/},()=>({path:'cookies',namespace:'test'}));b.onLoad({filter:/.*/,namespace:'test'},({path})=>({contents:path==='db'?'export async function db(){return globalThis.__studentDB}':'export async function cookies(){return globalThis.__studentJar}'}));}}]});
+ const result=await build({entryPoints:[fileURLToPath(new URL('../app/api/[...path]/route.js',import.meta.url))],bundle:true,write:false,platform:'node',format:'esm',external:['mongodb','web-push','sharp'],plugins:[{name:'student-boundaries',setup(b){b.onResolve({filter:/db\.mjs$/},()=>({path:'db',namespace:'test'}));b.onResolve({filter:/^web-push$/},()=>({path:'webpush',namespace:'push-test'}));b.onLoad({filter:/.*/,namespace:'push-test'},()=>({contents:'export default {setVapidDetails(){},async sendNotification(...args){return globalThis.__pushSend(...args)}}'}));b.onResolve({filter:/^next\/headers$/},()=>({path:'cookies',namespace:'test'}));b.onLoad({filter:/.*/,namespace:'test'},({path})=>({contents:path==='db'?'export async function db(){return globalThis.__studentDB}':'export async function cookies(){return globalThis.__studentJar}'}));}}]});
  await writeFile(outfile,result.outputFiles[0].contents);route=await import(outfile);
 });
 beforeEach(()=>{documents={};jar=new Map();globalThis.__studentDB=database();globalThis.__studentJar={get:name=>jar.has(name)?{value:jar.get(name).value}:undefined,set(name,value,options){jar.set(name,{value,options});},delete(name){jar.delete(name);}};});
@@ -126,4 +126,56 @@ test('Push sending is role-gated, general published-news only and deduplicated',
 });
 test('Discovery metadata has canonical URLs and script-safe structured data',()=>{
  assert.equal(pageMetadata('Title','Desc','/library').alternates.canonical,'https://eia-platform-chi.vercel.app/library');assert.doesNotMatch(jsonLd({name:'</script><script>bad'}),/</);assert.equal(JSON.parse(jsonLd({name:'</script>'})).name,'</script>');
+});
+
+test('Private profile fields are bounded, versioned and cannot grant roles or change institutional email',async()=>{
+ const user=seedStudent();const r=await request('student/profile','PUT',{version:0,name:'اسم جديد',phone:'+201012345678',studentCode:'2410423',city:'الإسكندرية',bio:'طالب نظم',role:'owner',email:'owner@evil.test'});
+ assert.equal(r.status,200);assert.equal(documents.students[0].role,undefined);assert.equal(documents.students[0].email,'bis.2410423@eia.edu.eg');assert.equal(documents.students[0].personal.phone,'+201012345678');
+ assert.equal((await request('student/profile','PUT',{version:0,name:'stale'})).status,409);
+ assert.equal((await request('student/profile','PUT',{version:1,name:'x',phone:'not a number'})).status,400);
+ const snapshot=await request('student/session');assert.equal(snapshot.data.user.personal.studentCode,'2410423');assert.equal(snapshot.data.user.profileVersion,1);
+ documents.student_sessions=[];assert.equal((await request('student/profile','PUT',{version:1,name:'x'})).status,401);
+});
+test('Login and preference restoration cannot create analytic consent; explicit choice persists and opt-out gates events',async()=>{
+ const user=seedStudent();assert.equal((await request('telemetry/consent','POST',{enabled:true,restore:true})).data.enabled,false);assert.equal(user.analyticsConsent,undefined);
+ await request('telemetry/consent','POST',{enabled:true});assert.equal(user.analyticsConsent,true);
+ await request('telemetry/consent','POST',{enabled:false});assert.equal(user.analyticsConsent,false);assert.equal((await request('telemetry/pulse','POST',{visible:true,active:true})).data.enabled,false);
+});
+test('Ad requests stay private, accept only the student-owned identity and require review consent',async()=>{
+ const user=seedStudent(),value={business:'Project',contact:'contact@example.test',title:'Sponsored',description:'Details',url:'https://eia.edu.eg/',slot:'home',acceptReview:true,studentId:'other',status:'published',weight:10};
+ assert.equal((await request('student/ad-requests','POST',{...value,acceptReview:false})).status,400);
+ assert.equal((await request('student/ad-requests','POST',value)).status,200);const record=documents.ad_requests[0];assert.equal(record.status,'pending');assert.equal(String(record.studentId),String(user._id));assert.equal(record.weight,1);assert.equal(documents.campaigns,undefined);
+ const other=seedStudent();assert.notEqual(String(other._id),String(user._id));assert.equal((await request('student/ad-requests')).data.requests.length,0);
+ seedAdmin('editor');assert.equal((await request('admin/ad-requests')).status,403);
+});
+test('Ad review creates an idempotent draft and rejects competing decisions instead of publishing silently',async()=>{
+ seedStudent();const value={business:'Project',contact:'contact@example.test',title:'Sponsored',url:'https://eia.edu.eg/',slot:'home',acceptReview:true};await request('student/ad-requests','POST',value);const item=documents.ad_requests[0];
+ seedAdmin('admin');const path=`admin/ad-requests/${item._id}`;
+ assert.equal((await request(path,'PUT',{action:'approve',version:1})).status,200);assert.equal(documents.campaigns.length,1);assert.equal(documents.campaigns[0].status,'draft');assert.equal(documents.campaigns[0].contact,undefined);assert.equal(documents.campaigns[0].applicantEmail,undefined);
+ assert.equal((await request(path,'PUT',{action:'approve',version:1})).status,200);assert.equal(documents.campaigns.length,1);
+ assert.equal((await request(path,'PUT',{action:'reject',version:1})).status,409);
+});
+test('Creative references cannot reuse another student private asset and public projection strips creative secrets',async()=>{
+ const user=seedStudent(),id=new ObjectId();documents.ad_media=[{_id:id,ownerId:new ObjectId(),kind:'banner',expiresAt:new Date(Date.now()+10000)}];
+ assert.equal((await request('student/ad-requests','POST',{business:'x',contact:'x',title:'x',url:'https://eia.edu.eg/',slot:'home',acceptReview:true,banner:{kind:'upload',id:String(id)}})).status,400);
+ documents.ad_media[0].ownerId=user._id;assert.equal((await request('student/ad-requests','POST',{business:'x',contact:'x',title:'x',url:'https://eia.edu.eg/',slot:'home',acceptReview:true,banner:{kind:'upload',id:String(id)}})).status,200);
+});
+test('Measured ad deliveries need consent, a live campaign and a matching impression, and duplicate clicks do not increment',async()=>{
+ seedStudent();const id=new ObjectId(),uuid='12345678-1234-1234-1234-123456789abc',value={target:String(id),requestId:uuid};documents.campaigns=[{_id:id,status:'published',startsAt:new Date(Date.now()-1000),endsAt:null}];
+ assert.equal((await request('telemetry/ad-view','POST',value)).data.enabled,false);await request('telemetry/consent','POST',{enabled:true});
+ assert.equal((await request('telemetry/ad-click','POST',value)).data.counted,false);await request('telemetry/ad-view','POST',value);await request('telemetry/ad-view','POST',value);assert.equal(documents.ad_deliveries.length,1);
+ assert.equal((await request('telemetry/ad-click','POST',value)).data.counted,true);assert.equal((await request('telemetry/ad-click','POST',value)).data.counted,false);
+ documents.campaigns[0].status='archived';assert.equal((await request('telemetry/ad-view','POST',{...value,requestId:'12345678-1234-1234-1234-123456789def'})).status,404);
+});
+
+test('Raster uploads are reencoded, private before publication, and never accept executable SVG',async()=>{
+ const user=seedStudent(),sharp=(await import('sharp')).default;
+ const png=await sharp({create:{width:40,height:40,channels:3,background:'#684fa3'}}).png().toBuffer();
+ const send=async(bytes,name,type)=>{const form=new FormData();form.set('kind','icon');form.set('file',new File([bytes],name,{type}));return route.POST(new Request('http://student.test/api/student/ad-media',{method:'POST',headers:{host:'student.test',origin:'http://student.test'},body:form}),{params:Promise.resolve({path:['student','ad-media']})});};
+ const response=await send(png,'test.png','image/png');assert.equal(response.status,201);const body=await response.json();assert.equal(body.image.kind,'upload');assert.equal(documents.ad_media.length,1);
+ const record=documents.ad_media[0],meta=await sharp(record.data.buffer).metadata();assert.equal(meta.format,'webp');assert.equal(meta.exif,undefined);assert.equal(record.ownerArea,'student');
+ const privateRead=await route.GET(new Request(`http://student.test/api/student/ad-media/${record._id}`,{headers:{host:'student.test'}}),{params:Promise.resolve({path:['student','ad-media',String(record._id)]})});assert.equal(privateRead.status,200);assert.equal(privateRead.headers.get('content-type'),'image/webp');
+ assert.equal((await request(`public/ad-media/${record._id}`)).status,404);
+ assert.equal((await send('<svg><script>alert(1)</script></svg>','fake.png','image/png')).status,400);
+ seedStudent();assert.equal((await request(`student/ad-media/${record._id}`)).status,404);
 });

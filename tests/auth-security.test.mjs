@@ -205,7 +205,7 @@ before(async () => {
     bundle: true,
     platform: "node",
     format: "esm",
-    external: ["mongodb", "web-push"],
+    external: ["mongodb", "web-push", "sharp"],
     plugins: [
       {
         name: "security-test-boundaries",

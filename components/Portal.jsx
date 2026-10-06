@@ -15,6 +15,7 @@ import { DEPARTMENTS, normalize } from "../lib/validation.mjs";
 import { resourceShareUrl, sortResources } from "../lib/catalog.mjs";
 import { useTelemetry, PrivacyPanel, AdSlot } from "./Telemetry";
 const PwaTools=lazy(()=>import("./PwaTools"));
+const AdvertiseDialog=lazy(()=>import("./AdRequests").then(m=>({default:m.AdvertiseDialog})));
 const StudentAccount = lazy(() => import("./StudentAccount"));
 const YEARS = ["الأولى", "الثانية", "الثالثة", "الرابعة"];
 const SOURCES = [
@@ -82,7 +83,8 @@ export default function Portal() {
   const [student, setStudent] = useState(null), [accountOpen, setAccountOpen] = useState(false), [cloudStatus, setCloudStatus] = useState("saved"), [emailVerificationAvailable, setEmailVerificationAvailable] = useState(false);
   const cloudVersion = useRef(0), cloudSerialized = useRef(null), cloudPaused = useRef(false), cloudBusy = useRef(false), switchingAccount = useRef(false), studentId = useRef(null);
   studentId.current = student?._id;
-  const metrics = useTelemetry(tab);
+  const [accountReady,setAccountReady]=useState(false),[advertiseOpen,setAdvertiseOpen]=useState(false);
+  const metrics = useTelemetry(tab,student,accountReady);
   function applyAccount(snapshot) {
     cloudPaused.current = false;
     setStudent(snapshot.user);
@@ -104,7 +106,7 @@ export default function Portal() {
     }
     setCloudStatus("saved");
   }
-  useEffect(() => { api("student/session").then(applyAccount).catch(()=>{}); }, []);
+  useEffect(() => { api("student/session").then(applyAccount).catch(()=>{}).finally(()=>setAccountReady(true)); }, []);
   useEffect(() => {
     if (!student || !ready || cloudPaused.current || switchingAccount.current) return;
     const value = JSON.stringify({profile, saved, completed}), id = student._id;
@@ -486,7 +488,7 @@ export default function Portal() {
             <div className="student-shortcuts" aria-label="اختصارات الدراسة">
               {[["subjects", "book", "موادي", "مرتبة حسب مسارك"], ["saved", "save", "محفوظاتي", "ارجع للمهم بسهولة"], ["sources", "link", "خدمات المعهد", "النتائج والروابط الأصلية"]].map(([id, icon, title, description]) => <button key={id} className="student-shortcut" onClick={() => navigate(id)}><span className="shortcut-icon"><Icon name={icon} /></span><span><strong>{title}</strong><small>{description}</small></span><Icon name="arrow" size={17} /></button>)}
             </div>
-            <AdSlot campaigns={catalog.campaigns} slot="home" track={metrics.track} enabled={metrics.enabled}/>
+            <AdSlot campaigns={catalog.campaigns} slot="home" profile={profile} track={metrics.track} enabled={metrics.enabled}/>
             <div className="section-heading">
               <div>
                 <p className="eyebrow">ابدأ من آخر إضافة</p>
@@ -811,14 +813,16 @@ export default function Portal() {
       </main>
       <footer className="student-footer">
         <div className="container">
-          <AdSlot campaigns={catalog.campaigns} slot="footer" track={metrics.track} enabled={metrics.enabled}/>
+          <AdSlot campaigns={catalog.campaigns} slot="footer" profile={profile} track={metrics.track} enabled={metrics.enabled}/>
           <div className="footer-top"><div className="footer-identity"><Brand title={catalog.settings?.title}/><h2>دراستك أوضح. وقتك ليك.</h2><p>مساحة طلابية مستقلة تنظّم المواد والمحاضرات، وتخلّي الرجوع للمهم أسهل.</p></div><nav aria-label="روابط المنصة في الفوتر"><h3>مساحتك الدراسية</h3>{[["library","book","المكتبة"],["saved","save","المحفوظات"],["news","news","الإعلانات"]].map(([id,icon,label])=><button key={id} className="text-button" onClick={()=>navigate(id)}><Icon name={icon} size={17}/>{label}</button>)}<button className="text-button" onClick={()=>setAccountOpen(true)}><Icon name="calendar" size={17}/>حسابي وخطة الدراسة</button></nav><nav aria-label="المصادر الرسمية في الفوتر"><h3>خدمات المعهد</h3>{SOURCES.slice(0,3).map(source=><a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer">{source.title}<Icon name="external" size={15}/></a>)}<button className="text-button" onClick={()=>navigate("sources")}>كل المصادر<Icon name="arrow" size={16}/></button>{catalog.settings?.communityUrl&&<a href={catalog.settings.communityUrl} target="_blank" rel="noopener noreferrer">قناة الطلبة<Icon name="external" size={15}/></a>}</nav></div>
+          <button className="advertise-entry" onClick={()=>setAdvertiseOpen(true)}><Icon name="megaphone" size={21}/><span><strong>حط إعلانك هنا</strong><small>قدّم طلبك، وفريق المنصة يراجعه قبل النشر</small></span><Icon name="arrow" size={18}/></button>
           <PrivacyPanel metrics={metrics}/>
           <Suspense fallback={null}><PwaTools/></Suspense>
           <div className="footer-bottom"><p>© {new Date().getFullYear()} EIA Platform · منصة مستقلة، غير تابعة رسميًا للمعهد. حقوق المحتوى لأصحابه.</p><span><Icon name="shield" size={16}/>حسابات الطلبة منفصلة عن الإدارة</span></div>
         </div>
       </footer>
-      {accountOpen && <Suspense fallback={<div role="status" className="notice">جاري فتح حسابك…</div>}><StudentAccount user={student} emailVerificationAvailable={emailVerificationAvailable} cloudStatus={cloudStatus} onClose={()=>setAccountOpen(false)} onChanged={applyAccount} onAuthBusy={busy=>{switchingAccount.current=busy;}}/></Suspense>}
+      {advertiseOpen&&<Suspense fallback={<div role="status" className="notice">جاري فتح الإعلان…</div>}><AdvertiseDialog user={student} onClose={()=>setAdvertiseOpen(false)} onSignIn={()=>{setAdvertiseOpen(false);setAccountOpen(true);}}/></Suspense>}
+      {accountOpen && <Suspense fallback={<div role="status" className="notice">جاري فتح حسابك…</div>}><StudentAccount metrics={metrics} user={student} emailVerificationAvailable={emailVerificationAvailable} cloudStatus={cloudStatus} onClose={()=>setAccountOpen(false)} onChanged={applyAccount} onAuthBusy={busy=>{switchingAccount.current=busy;}}/></Suspense>}
       <nav className="mobile-nav" aria-label="التنقل على الموبايل">
         {[
           ["home", "grid", "الرئيسية"],
