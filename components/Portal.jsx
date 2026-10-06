@@ -14,6 +14,7 @@ import {
 import { DEPARTMENTS, normalize } from "../lib/validation.mjs";
 import { resourceShareUrl, sortResources } from "../lib/catalog.mjs";
 import { useTelemetry, PrivacyPanel, AdSlot } from "./Telemetry";
+const PwaTools=lazy(()=>import("./PwaTools"));
 const StudentAccount = lazy(() => import("./StudentAccount"));
 const YEARS = ["الأولى", "الثانية", "الثالثة", "الرابعة"];
 const SOURCES = [
@@ -409,7 +410,8 @@ export default function Portal() {
           </div>
         </div>
       </header>
-      <main className="container page-motion" key={tab}>
+      <a className="skip-link" href="#main-content">انتقل للمحتوى</a>
+      <main id="main-content" tabIndex={-1} className="container page-motion" key={tab}>
         {catalog.settings?.bannerText && (
           <div className="platform-banner">
             <Icon name="news" size={20} />
@@ -812,6 +814,7 @@ export default function Portal() {
           <AdSlot campaigns={catalog.campaigns} slot="footer" track={metrics.track} enabled={metrics.enabled}/>
           <div className="footer-top"><div className="footer-identity"><Brand title={catalog.settings?.title}/><h2>دراستك أوضح. وقتك ليك.</h2><p>مساحة طلابية مستقلة تنظّم المواد والمحاضرات، وتخلّي الرجوع للمهم أسهل.</p></div><nav aria-label="روابط المنصة في الفوتر"><h3>مساحتك الدراسية</h3>{[["library","book","المكتبة"],["saved","save","المحفوظات"],["news","news","الإعلانات"]].map(([id,icon,label])=><button key={id} className="text-button" onClick={()=>navigate(id)}><Icon name={icon} size={17}/>{label}</button>)}<button className="text-button" onClick={()=>setAccountOpen(true)}><Icon name="calendar" size={17}/>حسابي وخطة الدراسة</button></nav><nav aria-label="المصادر الرسمية في الفوتر"><h3>خدمات المعهد</h3>{SOURCES.slice(0,3).map(source=><a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer">{source.title}<Icon name="external" size={15}/></a>)}<button className="text-button" onClick={()=>navigate("sources")}>كل المصادر<Icon name="arrow" size={16}/></button>{catalog.settings?.communityUrl&&<a href={catalog.settings.communityUrl} target="_blank" rel="noopener noreferrer">قناة الطلبة<Icon name="external" size={15}/></a>}</nav></div>
           <PrivacyPanel metrics={metrics}/>
+          <Suspense fallback={null}><PwaTools/></Suspense>
           <div className="footer-bottom"><p>© {new Date().getFullYear()} EIA Platform · منصة مستقلة، غير تابعة رسميًا للمعهد. حقوق المحتوى لأصحابه.</p><span><Icon name="shield" size={16}/>حسابات الطلبة منفصلة عن الإدارة</span></div>
         </div>
       </footer>

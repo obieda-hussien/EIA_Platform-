@@ -9,9 +9,7 @@ export default function ErrorPage({ reset }) {
         <a className="button secondary" href="/">
           الرئيسية
         </a>
-        <a className="button secondary" href="/admin">
-          لوحة الإدارة
-        </a>
+
       </div>
     </main>
   );

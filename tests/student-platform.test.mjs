@@ -7,6 +7,8 @@ import {ObjectId} from 'mongodb';
 import {hashPassword,digest} from '../lib/security.mjs';
 import {institutionalEmail,studyState,plannerItems} from '../lib/student-data.mjs';
 import {activityDelta,cairoDay,splitDays,safeEvent} from '../lib/activity-data.mjs';
+import {pushSubscription} from '../lib/push-data.mjs';
+import {jsonLd,pageMetadata} from '../lib/seo.mjs';
 import {campaignInput} from '../lib/campaigns.mjs';
 let route,documents,jar,hash;
 const outfile=fileURLToPath(new URL(`../node_modules/.cache/eia-students-${process.pid}.mjs`,import.meta.url));
@@ -30,7 +32,7 @@ before(async()=>{
  process.env.ADMIN_HOST='control.test';delete process.env.RESEND_API_KEY;delete process.env.EMAIL_FROM;
  hash=await hashPassword('fixture-private-student-password');
  await mkdir(fileURLToPath(new URL('../node_modules/.cache',import.meta.url)),{recursive:true});
- const result=await build({entryPoints:[fileURLToPath(new URL('../app/api/[...path]/route.js',import.meta.url))],bundle:true,write:false,platform:'node',format:'esm',external:['mongodb'],plugins:[{name:'student-boundaries',setup(b){b.onResolve({filter:/db\.mjs$/},()=>({path:'db',namespace:'test'}));b.onResolve({filter:/^next\/headers$/},()=>({path:'cookies',namespace:'test'}));b.onLoad({filter:/.*/,namespace:'test'},({path})=>({contents:path==='db'?'export async function db(){return globalThis.__studentDB}':'export async function cookies(){return globalThis.__studentJar}'}));}}]});
+ const result=await build({entryPoints:[fileURLToPath(new URL('../app/api/[...path]/route.js',import.meta.url))],bundle:true,write:false,platform:'node',format:'esm',external:['mongodb','web-push'],plugins:[{name:'student-boundaries',setup(b){b.onResolve({filter:/db\.mjs$/},()=>({path:'db',namespace:'test'}));b.onResolve({filter:/^web-push$/},()=>({path:'webpush',namespace:'push-test'}));b.onLoad({filter:/.*/,namespace:'push-test'},()=>({contents:'export default {setVapidDetails(){},async sendNotification(...args){return globalThis.__pushSend(...args)}}'}));b.onResolve({filter:/^next\/headers$/},()=>({path:'cookies',namespace:'test'}));b.onLoad({filter:/.*/,namespace:'test'},({path})=>({contents:path==='db'?'export async function db(){return globalThis.__studentDB}':'export async function cookies(){return globalThis.__studentJar}'}));}}]});
  await writeFile(outfile,result.outputFiles[0].contents);route=await import(outfile);
 });
 beforeEach(()=>{documents={};jar=new Map();globalThis.__studentDB=database();globalThis.__studentJar={get:name=>jar.has(name)?{value:jar.get(name).value}:undefined,set(name,value,options){jar.set(name,{value,options});},delete(name){jar.delete(name);}};});
@@ -104,4 +106,24 @@ test('Configured mail consumes an expiring keyed code and never exposes it throu
 test('Failed mail removes only the issued challenge and preserves unverified status',async()=>{
  seedStudent();const oldFetch=globalThis.fetch;process.env.RESEND_API_KEY='fixture-key';process.env.EMAIL_FROM='study@fixture.test';process.env.MFA_ENCRYPTION_KEY='fixture-purpose-key';globalThis.fetch=async()=>({ok:false});
  try{assert.equal((await request('student/verification','POST',{})).status,503);assert.equal(documents.students[0].emailVerified,false);assert.equal(documents.students[0].verificationHash,undefined);}finally{globalThis.fetch=oldFetch;delete process.env.RESEND_API_KEY;delete process.env.EMAIL_FROM;delete process.env.MFA_ENCRYPTION_KEY;}
+});
+
+const pushValue=()=>({endpoint:'https://fcm.googleapis.com/fcm/send/fixture-endpoint',keys:{p256dh:Buffer.concat([Buffer.from([4]),Buffer.alloc(64,7)]).toString('base64url'),auth:Buffer.alloc(16,8).toString('base64url')}});
+test('Push endpoint validation refuses SSRF, lookalikes and malformed keys',()=>{
+ assert.equal(pushSubscription(pushValue()).endpoint,pushValue().endpoint);
+ for(const endpoint of ['http://fcm.googleapis.com/fcm/send/x','https://127.0.0.1/a','https://fcm.googleapis.com.evil/fcm/send/x','https://user:pass@fcm.googleapis.com/fcm/send/x','https://fcm.googleapis.com:444/fcm/send/x','https://fcm.googleapis.com/fcm/send/x?url=evil'])assert.throws(()=>pushSubscription({...pushValue(),endpoint}));
+ assert.throws(()=>pushSubscription({...pushValue(),keys:{p256dh:'wrong',auth:'wrong'}}));
+});
+test('Push subscriptions require configured delivery and are scoped to their opaque browser cookie',async()=>{
+ assert.equal((await request('push/config')).data.available,false);assert.equal((await request('push/subscribe','POST',{subscription:pushValue()})).status,503);
+ process.env.VAPID_PUBLIC_KEY='fixture-public';process.env.VAPID_PRIVATE_KEY='fixture-private';process.env.VAPID_SUBJECT='https://fixture.test/about';
+ try{assert.equal((await request('push/subscribe','POST',{subscription:pushValue()})).status,200);assert.equal(jar.get('eia_push').options.httpOnly,true);assert.equal(documents.push_subscriptions.length,1);jar.delete('eia_push');assert.equal((await request('push/subscribe','POST',{subscription:pushValue()})).status,409);assert.equal(documents.push_subscriptions.length,1);}finally{delete process.env.VAPID_PUBLIC_KEY;delete process.env.VAPID_PRIVATE_KEY;delete process.env.VAPID_SUBJECT;}
+});
+test('Push sending is role-gated, general published-news only and deduplicated',async()=>{
+ const news={_id:new ObjectId(),title:'General notice',body:'Study update',status:'published',department:'',year:0,expiresAt:null};documents.news=[news];documents.push_subscriptions=[{_id:'a'.repeat(64),subscription:pushValue(),expiresAt:new Date(Date.now()+10000)}];seedAdmin('editor');assert.equal((await request('admin/notifications','POST',{newsId:String(news._id)})).status,403);
+ process.env.VAPID_PUBLIC_KEY='fixture-public';process.env.VAPID_PRIVATE_KEY='fixture-private';process.env.VAPID_SUBJECT='https://fixture.test/about';let calls=0;globalThis.__pushSend=async()=>{calls++;};
+ try{documents.admins[0].role='admin';const a=await request('admin/notifications','POST',{newsId:String(news._id)});assert.equal(a.status,200);assert.equal(a.data.sent,1);assert.equal((await request('admin/notifications','POST',{newsId:String(news._id)})).data.skipped,1);assert.equal(calls,1);news.department='bis';assert.equal((await request('admin/notifications','POST',{newsId:String(news._id)})).status,404);assert.equal(calls,1);}finally{delete process.env.VAPID_PUBLIC_KEY;delete process.env.VAPID_PRIVATE_KEY;delete process.env.VAPID_SUBJECT;delete globalThis.__pushSend;}
+});
+test('Discovery metadata has canonical URLs and script-safe structured data',()=>{
+ assert.equal(pageMetadata('Title','Desc','/library').alternates.canonical,'https://eia-platform-chi.vercel.app/library');assert.doesNotMatch(jsonLd({name:'</script><script>bad'}),/</);assert.equal(JSON.parse(jsonLd({name:'</script>'})).name,'</script>');
 });

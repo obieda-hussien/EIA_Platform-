@@ -46,6 +46,8 @@ export async function api(path, options = {}) {
   return data;
 }
 const ICON_PATHS = {
+  bell:"M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8 12a2 2 0 0 0 4 0",
+  phone:"M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm3 3h4m-3 14h2",
   book: "M12 6.5c-2.5-2-5.5-2-8-1v14c2.5-1 5.5-1 8 1 2.5-2 5.5-2 8-1v-14c-2.5-1-5.5-1-8 1Zm0 0v14M7 9h2M15 9h2",
   file: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Zm0 0v5h5M9 12h6M9 16h4",
   folder: "M3 7V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z",

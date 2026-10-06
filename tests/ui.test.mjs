@@ -45,6 +45,7 @@ before(async () => {
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
   globalThis.localStorage = dom.window.localStorage;
+  Object.defineProperty(globalThis,'navigator',{value:dom.window.navigator,configurable:true});
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const { outputFiles } = await build({
     stdin: {
@@ -88,6 +89,7 @@ before(async () => {
       if(options.method==="POST")campaignRecords.push({...JSON.parse(options.body),_id:"f".repeat(24)});
       return Response.json({campaigns:campaignRecords});
     }
+    if (path === "/api/admin/notifications") return Response.json(options.method==="POST"?{sent:1,failed:0,skipped:0,next:null}:{available:true,subscribers:1,news:[{_id:"a".repeat(24),title:"إعلان عام"}]});
     if (path === "/api/admin/students") return Response.json({students:[],sharedBrowsers:[]});
     if (path === "/api/auth/session") return Response.json({ user });
     if (path === "/api/auth/security") return Response.json(securityState);
@@ -430,4 +432,16 @@ test("Dashboard has real empty analytics and campaign drafting controls", async 
 test("Editors never see activity, campaign or student-directory navigation", async () => {
   user={...user,role:"editor"};await mount(Admin);
   for(const label of ["إحصائيات النشاط","الإعلانات الممولة","حسابات الطلبة"])assert.equal([...document.querySelectorAll('.admin-sidebar button')].some(b=>b.textContent.trim()===label),false);
+});
+
+
+test("Student homepage and account modal pass automated accessibility structure checks",async()=>{
+ await mount(Portal);const axe=(await import('axe-core')).default;
+ const check=async()=>{const result=await axe.run(document.getElementById('root'),{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']},rules:{'color-contrast':{enabled:false}}});assert.deepEqual(result.violations.map(v=>({id:v.id,impact:v.impact})),[]);};
+ await check();await click(button('تسجيل الدخول'));await check();
+});
+
+
+test("Admins can select a general announcement and inspect its push delivery result",async()=>{
+ await mount(Admin);await click(button('إشعارات الطلبة'));const select=document.querySelector('select');await change(select,'a'.repeat(24));await click(button('إرسال تنبيه الإعلان للمشتركين'));assert.match(document.body.textContent,/مقبول للإرسال: 1/);
 });

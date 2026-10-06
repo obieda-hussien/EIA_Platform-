@@ -212,3 +212,22 @@ test("New routes reject query injection, extra records and cross-origin writes b
 test("Student logout expires its distinct secure cookie without touching administration", async () => {
  const response=await request(`${origin}/api/student/logout`,{method:'POST',headers:{origin,'content-type':'application/json'},body:'{}'});assert.equal(response.status,200);const cookies=response.headers.getSetCookie();const cookie=cookies.find(x=>x.startsWith('__Host-eia_student='));assert.ok(cookie);assert.match(cookie,/Secure/i);assert.match(cookie,/HttpOnly/i);assert.match(cookie,/SameSite=strict/i);assert.match(cookie,/Max-Age=0/i);assert.ok(!cookies.some(x=>x.startsWith('__Host-eia_session=')));
 });
+
+
+test("PWA manifest and icons have installable assets while service-worker caching stays private-data-free",async()=>{
+ const r=await request(`${origin}/manifest.webmanifest`);assert.equal(r.status,200);const manifest=await r.json();assert.equal(manifest.display,'standalone');assert.equal(manifest.lang,'ar');assert.ok(manifest.icons.some(i=>i.purpose==='maskable'));
+ for(const icon of manifest.icons)assert.equal((await request(origin+icon.src)).status,200);
+ const worker=await request(`${origin}/sw.js`);assert.equal(worker.status,200);assert.match(worker.headers.get('cache-control'),/no-store/);assert.equal(worker.headers.get('service-worker-allowed'),'/');const source=await worker.text();assert.match(source,/offline\.html/);assert.doesNotMatch(source,/cache\.put|cacheFirst|caches\.match\(event\.request/);
+ assert.equal((await request(`${origin}/manifest.webmanifest`,{headers:{host:controlHost}})).status,404);
+});
+test("SEO canonical metadata and structured data are server-rendered and private discovery is denied",async()=>{
+ const home=await request(origin),html=await home.text();assert.match(html,/application\/ld\+json/);assert.match(html,/rel="canonical"/);assert.match(html,/manifest.webmanifest/);assert.match(html,/انتقل للمحتوى/);
+ const about=await request(`${origin}/about`);assert.equal(about.status,200);const body=await about.text();assert.match(body,/منصة طلابية، لدراسة أوضح/);assert.match(body,/ليست|غير تابعة/);
+ const robot=await request(`${origin}/robots.txt`,{headers:{host:'eia-platform-chi.vercel.app'}});assert.match(await robot.text(),/Sitemap: https:\/\/eia-platform-chi.vercel.app\/sitemap.xml/);
+ const closed=await request(`${origin}/robots.txt`,{headers:{host:controlHost}});assert.match(await closed.text(),/Disallow: \//);assert.equal((await request(`${origin}/sitemap.xml`,{headers:{host:controlHost}})).status,404);assert.equal((await request(`${origin}/sitemap.xml`)).status,503);
+});
+test("Push reads reveal only capability, notifications stay private and cross-origin registration is blocked",async()=>{
+ const config=await request(`${origin}/api/push/config`);assert.deepEqual(await config.json(),{available:false,publicKey:null});assert.equal((await request(`${origin}/api/admin/notifications`)).status,401);
+ assert.equal((await request(`${origin}/api/push/subscribe`,{method:'POST',headers:{origin:'https://evil.test','content-type':'application/json'},body:'{}'})).status,403);
+ assert.equal((await request(`${origin}/api/push/config`,{headers:{host:controlHost}})).status,404);
+});

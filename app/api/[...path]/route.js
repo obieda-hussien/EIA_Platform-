@@ -1,3 +1,4 @@
+import {pushAction,notificationAction} from "../../../lib/push.mjs";
 import { ObjectId, Binary } from "mongodb";
 import { db } from "../../../lib/db.mjs";
 import { readLimited } from "../../../lib/http.mjs";
@@ -122,6 +123,7 @@ async function dispatch(req, context) {
   const source = clientKey(req);
   // Bounded local limits shed repeat traffic before MongoDB and scrypt work.
   earlyLimit(`api:${source}`, 240);
+  if (area === "push") return json(await pushAction(req,entity,body,source));
   if (area === "student") {
     if (method !== "GET") earlyLimit(`student:${source}`, 60);
     return json(await studentAction(req, entity, body, source));
@@ -318,7 +320,8 @@ async function dispatch(req, context) {
     earlyLimit(`admin:${user._id}`, 120);
     if (method !== "GET") await throttle(`writes:${user._id}`, 60, 60000);
     const d = await db();
-    if (["analytics", "campaigns"].includes(entity) && user.role === "editor") throw new AppError("متاحة للمالك والأدمن فقط.", 403);
+    if (["analytics", "campaigns", "notifications"].includes(entity) && user.role === "editor") throw new AppError("متاحة للمالك والأدمن فقط.", 403);
+    if (entity === "notifications") {if(method!=="GET")await throttle(`push-send:${user._id}`,20,60000);return json(await notificationAction(req,body));}
     if (entity === "analytics") return json(await analyticsSnapshot(url.searchParams.get("days") === "7" ? 7 : 30));
     if (entity === "students") {
       owner(user);
