@@ -126,3 +126,11 @@ test("Malformed cookies and anonymous security routes expose no account secrets"
   for (const path of ["security", "sessions"])
     assert.equal((await fetch(`${origin}/api/auth/${path}`)).status, 401);
 });
+test("Logout expires the host-prefixed cookie with its required Secure attributes", async () => {
+  const result = await fetch(`${origin}/api/auth/logout`, {
+    method: "POST", headers: { origin },
+  });
+  assert.equal(result.status, 200);
+  const cookie = result.headers.getSetCookie().find((value) => value.startsWith("__Host-eia_session="));
+  assert.ok(cookie); assert.match(cookie, /Secure/i); assert.match(cookie, /Path=\//i); assert.match(cookie, /Max-Age=0/i);
+});
