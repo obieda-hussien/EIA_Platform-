@@ -1661,3 +1661,5 @@ input[type="checkbox"] {
     scroll-behavior: auto !important;
   }
 }
+.mfa-secret { display: block; overflow-wrap: anywhere; margin: 1rem 0; }
+.recovery-codes { display: grid; gap: .5rem; margin: 1rem 0; overflow-wrap: anywhere; }

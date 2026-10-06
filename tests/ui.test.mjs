@@ -7,7 +7,7 @@ import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { SITE_DEFAULTS, settingsInput } from "../lib/validation.mjs";
 
-let dom, createRoot, Admin, Portal, root, settings, user;
+let dom, createRoot, Admin, Portal, root, settings, user, securityState;
 const errors = [];
 const subject = {
   _id: "a".repeat(24),
@@ -68,6 +68,38 @@ before(async () => {
   ({ createRoot } = await import("react-dom/client"));
   globalThis.fetch = async (path, options = {}) => {
     if (path === "/api/auth/session") return Response.json({ user });
+    if (path === "/api/auth/security") return Response.json(securityState);
+    if (
+      path === "/api/auth/sessions" &&
+      (!options.method || options.method === "GET")
+    )
+      return Response.json({
+        sessions: [
+          {
+            _id: "a".repeat(64),
+            current: true,
+            lastSeenAt: "2026-10-06T00:00:00Z",
+          },
+        ],
+      });
+    if (path === "/api/auth/mfa-enroll" && options.method === "POST")
+      return Response.json({
+        secret: "ABCDEFGHIJKLMNOPQRSTUVWX234567AB",
+        account: user.email,
+      });
+    if (path === "/api/auth/mfa-confirm" && options.method === "POST") {
+      securityState = {
+        mfaEnabled: true,
+        mfaAvailable: true,
+        recoveryRemaining: 8,
+      };
+      return Response.json({
+        ok: true,
+        recoveryCodes: Array.from({ length: 8 }, (_, i) =>
+          String(i).repeat(20),
+        ),
+      });
+    }
     if (path === "/api/admin/overview")
       return Response.json({
         user,
@@ -99,6 +131,11 @@ before(async () => {
 });
 beforeEach(() => {
   settings = { ...SITE_DEFAULTS };
+  securityState = {
+    mfaEnabled: false,
+    mfaAvailable: true,
+    recoveryRemaining: 0,
+  };
   user = {
     _id: "owner",
     name: "Test owner",
@@ -289,4 +326,20 @@ test("Unavailable shared content shows a notice and editors have no settings tab
     ),
     false,
   );
+});
+
+test("Admins can enroll MFA and save recovery codes without exposing them elsewhere", async () => {
+  await mount(Admin);
+  await click(button("أمان الحساب"));
+  assert.equal(button("إعداد التحقق بخطوتين").disabled, true);
+  await change(field("كلمة المرور الحالية"), "secure-test-password");
+  await click(button("إعداد التحقق بخطوتين"));
+  assert.ok(document.querySelector(".mfa-secret"));
+  assert.equal(field("كلمة المرور الحالية").value, "");
+  await change(field("رمز المصادقة أو كود الاسترداد"), "123456");
+  await click(button("تأكيد التفعيل"));
+  assert.equal(document.querySelector(".mfa-secret"), null);
+  assert.equal(document.querySelectorAll(".recovery-codes code").length, 8);
+  await click(button("حفظتها في مكان آمن"));
+  assert.equal(document.querySelectorAll(".recovery-codes code").length, 0);
 });

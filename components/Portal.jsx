@@ -940,17 +940,9 @@ export default function Portal() {
               <div>
                 <a
                   className="button"
-                  href={`/api/public/file/${view._id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  قراءة PDF ↗
-                </a>
-                <a
-                  className="button secondary"
                   href={`/api/public/file/${view._id}?download=1`}
                 >
-                  تنزيل
+                  تنزيل PDF
                 </a>
               </div>
             </div>

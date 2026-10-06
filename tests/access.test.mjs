@@ -70,15 +70,59 @@ test("Same-origin writes still require authentication", async () => {
   });
   assert.equal(r.status, 401);
 });
-test("Missing database configuration returns explicit unavailable state", async () => {
+test("Missing database configuration hides infrastructure details", async () => {
   for (const path of ["public/catalog", "auth/status"]) {
     const r = await fetch(`${origin}/api/${path}`);
     assert.equal(r.status, 503);
-    assert.match((await r.json()).error, /MONGODB_URI/);
+    assert.doesNotMatch(
+      (await r.json()).error,
+      /MONGODB_URI|Atlas|password|mongodb/i,
+    );
   }
 });
 test("Anonymous session exposes no account data or credentials", async () => {
   const r = await fetch(`${origin}/api/auth/session`);
   assert.deepEqual(await r.json(), { user: null });
   assert.match(r.headers.get("cache-control"), /no-store/);
+});
+test("Fresh CSP nonces apply to rendered scripts with hardened headers", async () => {
+  const first = await fetch(origin),
+    second = await fetch(origin);
+  const policy = first.headers.get("content-security-policy");
+  assert.doesNotMatch(policy, /unsafe-inline|unsafe-eval/);
+  const nonce = /'nonce-([^']+)'/.exec(policy)?.[1];
+  assert.ok(nonce);
+  assert.notEqual(policy, second.headers.get("content-security-policy"));
+  assert.ok((await first.text()).includes(`nonce="${nonce}"`));
+  assert.equal(first.headers.get("x-frame-options"), "DENY");
+  assert.equal(first.headers.get("x-content-type-options"), "nosniff");
+});
+test("Unknown paths, malformed IDs and query pollution fail before MongoDB", async () => {
+  for (const path of [
+    "public/catalog/extra",
+    "auth/session/extra",
+    "admin/unknown",
+    "public/file/bad",
+    "public/catalog?random=x",
+  ])
+    assert.ok(
+      [400, 404].includes((await fetch(`${origin}/api/${path}`)).status),
+    );
+  assert.equal((await fetch(`${origin}/api/auth/login`)).status, 405);
+});
+test("Bootstrap is closed after its temporary secret is removed", async () => {
+  const result = await fetch(`${origin}/api/auth/setup`, {
+    method: "POST",
+    headers: { origin, "content-type": "application/json" },
+    body: "{}",
+  });
+  assert.equal(result.status, 403);
+});
+test("Malformed cookies and anonymous security routes expose no account secrets", async () => {
+  const result = await fetch(`${origin}/api/auth/session`, {
+    headers: { cookie: "__Host-eia_session=forged-value" },
+  });
+  assert.deepEqual(await result.json(), { user: null });
+  for (const path of ["security", "sessions"])
+    assert.equal((await fetch(`${origin}/api/auth/${path}`)).status, 401);
 });

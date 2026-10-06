@@ -16,6 +16,7 @@ import {
 import { DEPARTMENTS, UPLOAD_LIMIT } from "../lib/validation.mjs";
 import { adminRecords } from "../lib/catalog.mjs";
 import Settings from "./Settings";
+import AccountSecurity from "./AccountSecurity";
 const TABS = [
   ["overview", "نظرة عامة", "grid"],
   ["resources", "المحتوى والملفات", "file"],
@@ -24,6 +25,7 @@ const TABS = [
   ["admins", "حسابات الأدمنز", "user"],
   ["audit", "سجل النشاط", "check"],
   ["settings", "إعدادات المنصة", "grid"],
+  ["security", "أمان الحساب", "check"],
 ];
 const DEFAULTS = {
   subjects: {
@@ -73,6 +75,7 @@ export default function Admin() {
       password: "",
       name: "",
       setupToken: "",
+      code: "",
     }),
     [pending, setPending] = useState(false),
     [editing, setEditing] = useState(null),
@@ -142,7 +145,13 @@ export default function Admin() {
         method: "POST",
         body: JSON.stringify(credentials),
       });
-      setCredentials({ email: "", password: "", name: "", setupToken: "" });
+      setCredentials({
+        email: "",
+        password: "",
+        name: "",
+        setupToken: "",
+        code: "",
+      });
       await boot();
     });
   }
@@ -376,6 +385,22 @@ export default function Admin() {
                     autoComplete={setup ? "new-password" : "current-password"}
                   />
                 </Field>
+                {!setup && (
+                  <Field label="رمز المصادقة أو الاسترداد — إذا فعّلت التحقق بخطوتين">
+                    <input
+                      dir="ltr"
+                      autoComplete="one-time-code"
+                      maxLength={20}
+                      value={credentials.code || ""}
+                      onChange={(e) =>
+                        setCredentials({
+                          ...credentials,
+                          code: e.target.value.trim(),
+                        })
+                      }
+                    />
+                  </Field>
+                )}
                 <button
                   className="full"
                   disabled={pending || (setup && !setupEnabled)}
@@ -407,7 +432,8 @@ export default function Admin() {
         <nav>
           {TABS.filter(
             ([id]) =>
-              !["admins", "settings"].includes(id) || user.role === "owner",
+              !["admins", "settings", "audit"].includes(id) ||
+              user.role === "owner",
           ).map(([id, label, icon]) => (
             <button
               key={id}
@@ -730,6 +756,15 @@ export default function Admin() {
                   const next = await api("admin/overview");
                   setData(next);
                   return next.settings;
+                }}
+              />
+            )}
+            {tab === "security" && (
+              <AccountSecurity
+                onChanged={async () => {
+                  const result = await api("auth/session");
+                  setUser(result.user);
+                  setData(await api("admin/overview"));
                 }}
               />
             )}

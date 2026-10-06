@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --test tests/contracts.test.mjs tests/http.test.mjs tests/catalog.test.mjs tests/ui.test.mjs",
+    "test": "node --test tests/contracts.test.mjs tests/http.test.mjs tests/catalog.test.mjs tests/security.test.mjs tests/auth-security.test.mjs tests/ui.test.mjs",
     "test:access": "node --test tests/access.test.mjs",
     "check": "node --check lib/validation.mjs && node --check lib/security.mjs"
   },

@@ -1,4 +1,5 @@
 import "./globals.css";
+export const dynamic = "force-dynamic";
 export const metadata = {
   title: "EIA Platform | مكتبتك الدراسية",
   description:
